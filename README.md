@@ -51,7 +51,7 @@ The update rule follows a leaky integrator with synaptic time constant τ_s = 30
 
 ## Default parameters
 
-The default configuration implements a ring attractor in the **absence of recurrent E-E and I-I connectivity** (amp_EE = amp_II = 0). A stable bump is sustained purely through the E→I→E feedback loop: broad excitatory drive onto inhibitory neurons (w_IE) combined with narrow inhibitory feedback onto excitatory neurons (w_EI, inverted profile). This produces a Mexican-hat effective connectivity in the excitatory population, supporting a localized, translation-invariant activity bump.
+The default configuration implements a ring attractor in the **absence of recurrent E-E and I-I connectivity** (amp_EE = amp_II = 0). A stable bump is sustained purely through the E→I→E feedback loop: a like-to-like excitatory drive onto inhibitory neurons (w_IE) combined with local disinhibitory feedback back onto excitatory neurons (w_EI). This produces a Mexican-hat effective connectivity in the excitatory population, supporting a localized, translation-invariant activity bump.
 
 ---
 
