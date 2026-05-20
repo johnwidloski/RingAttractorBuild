@@ -1,7 +1,17 @@
-[README.md](https://github.com/user-attachments/files/28075143/README.md)
+[README.md](https://github.com/user-attachments/files/28075216/README.md)
 # Ring Attractor Network GUI
 
 *A browser-based simulation tool for exploring excitatory-inhibitory ring attractor dynamics*
+
+---
+
+## Run it
+
+Open the following URL in any modern browser:
+
+https://johnwidloski.github.io/RingAttractor/RingNetworkGui.html
+
+Press **Start** to begin the simulation. No installation or server required.
 
 ---
 
