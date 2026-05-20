@@ -576,18 +576,18 @@ function mkChart(id, title, datasets, xlabel) {
 
 const charts = [
   mkChart('c1', 'Weights', [
-    ds('w_EE', BLUE, []),
-    ds('w_IE', BLUE, [3,4]),
-    ds('w_EI', RED,  [3,4]),
-    ds('w_II', RED,  []),
+    ds('w_EE', BLUE, [3,4]),
+    ds('w_IE', BLUE, []),
+    ds('w_EI', RED,  []),
+    ds('w_II', RED,  [3,4]),
   ]),
   mkChart('c2', 'Firing rates', [
     ds('E', BLUE, []),
     ds('I', RED,  []),
   ]),
   mkChart('c4', 'Inputs', [
-    ds('g_EE', BLUE, []),
-    ds('g_IE', BLUE, [3,4]),
+    ds('g_EE', BLUE, [3,4]),
+    ds('g_IE', BLUE, []),
     ds('g_EI', RED,  []),
     ds('g_II', RED,  [3,4]),
     ds('β_E',  BLUE, [8,4]),
