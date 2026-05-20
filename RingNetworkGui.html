@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Ring Attractor</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  background: #0d1117;
+  color: #c9d1d9;
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+  font-size: 13px;
+}
+
+/* ── Left panel ─────────────────────────────────────────────── */
+#controls {
+  width: 310px;
+  min-width: 280px;
+  background: #161b22;
+  border-right: 1px solid #30363d;
+  padding: 12px 12px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── Right panel ─────────────────────────────────────────────── */
+#plots {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 6px 6px 6px 8px;
+  gap: 4px;
+  overflow: hidden;
+  background: #0d1117;
+}
+.plot-wrap { flex: 1; position: relative; min-height: 0; }
+
+/* ── Start / Stop button ─────────────────────────────────────── */
+#startstop {
+  width: 100%;
+  padding: 7px 0;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition: background 0.15s, color 0.15s;
+}
+#startstop.running {
+  background: #b91c1c;
+  color: #fecaca;
+}
+#startstop.stopped {
+  background: #15803d;
+  color: #bbf7d0;
+}
+#resetbtn {
+  width: 100%;
+  padding: 7px 0;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  background: #21262d;
+  color: #8b949e;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition: background 0.15s, color 0.15s;
+}
+#resetbtn:hover {
+  background: #30363d;
+  color: #c9d1d9;
+}
+
+/* ── Section headers ─────────────────────────────────────────── */
+.sec-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #58a6ff;
+  border-bottom: 1px solid #21262d;
+  padding-bottom: 4px;
+  margin-bottom: 8px;
+}
+
+/* ── Generic control row ─────────────────────────────────────── */
+.ctrl-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.lbl {
+  color: #8b949e;
+  white-space: nowrap;
+  min-width: 52px;
+  font-size: 12px;
+}
+
+/* ── Range sliders ───────────────────────────────────────────── */
+input[type=range] {
+  flex: 1;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: #21262d;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: #58a6ff;
+  cursor: pointer;
+}
+.sval {
+  font-size: 11px;
+  color: #6e7681;
+  min-width: 34px;
+  text-align: right;
+}
+
+/* ── Toggle switches ─────────────────────────────────────────── */
+.tog { position: relative; display: inline-block; width: 32px; height: 18px; }
+.tog input { opacity: 0; width: 0; height: 0; }
+.tog-track {
+  position: absolute; cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: #21262d; border-radius: 18px; transition: .2s;
+}
+.tog-track::before {
+  content: '';
+  position: absolute;
+  width: 12px; height: 12px;
+  left: 3px; bottom: 3px;
+  background: #6e7681;
+  border-radius: 50%;
+  transition: .2s;
+}
+input:checked ~ .tog-track { background: #238636; }
+input:checked ~ .tog-track::before {
+  transform: translateX(14px);
+  background: #3fb950;
+}
+
+/* ── Weights table ───────────────────────────────────────────── */
+.wt { width: 100%; border-collapse: collapse; }
+.wt th {
+  font-size: 10px; color: #6e7681;
+  text-align: center; padding: 2px 2px 5px;
+  font-weight: 400;
+}
+.wt th:first-child { text-align: left; }
+.wt td { padding: 3px 2px; vertical-align: middle; }
+.wt td:first-child {
+  font-size: 12px; color: #8b949e;
+  white-space: nowrap; padding-right: 4px;
+}
+.wt td input[type=range] { width: 100%; min-width: 40px; }
+.wt .sval { min-width: 28px; font-size: 10px; }
+</style>
+</head>
+<body>
+
+<!-- ══ Controls ══════════════════════════════════════════════════ -->
+<div id="controls">
+
+  <button id="startstop" class="stopped">Start</button>
+  <button id="resetbtn">Reset parameters</button>
+
+  <!-- Spiking -->
+  <div class="ctrl-row">
+    <span class="lbl">Spiking</span>
+    <label class="tog">
+      <input type="checkbox" id="use_spiking" checked>
+      <span class="tog-track"></span>
+    </label>
+  </div>
+
+  <!-- Neurons -->
+  <div class="ctrl-row">
+    <span class="lbl">Neurons</span>
+    <input type="range" id="n_exp" min="3" max="10" step="1" value="7">
+    <span class="sval" id="n_val">128</span>
+  </div>
+
+  <!-- Weights -->
+  <div>
+    <div class="sec-title">Weights</div>
+    <table class="wt">
+      <thead>
+        <tr>
+          <th></th>
+          <th colspan="2">Sigma</th>
+          <th colspan="2">Amplitude</th>
+          <th>Invert</th>
+          <th>Binarize</th>
+        </tr>
+      </thead>
+      <tbody id="wtbody"></tbody>
+    </table>
+  </div>
+
+  <!-- Uniform Input -->
+  <div>
+    <div class="sec-title">Uniform Input</div>
+    <div class="ctrl-row">
+      <span class="lbl">β_E</span>
+      <input type="range" id="beta_E" min="0" max="1000" step="1" value="400">
+      <span class="sval" id="beta_E_val">400</span>
+    </div>
+    <div class="ctrl-row">
+      <span class="lbl">β_I</span>
+      <input type="range" id="beta_I" min="0" max="1000" step="1" value="0">
+      <span class="sval" id="beta_I_val">0</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══ Plots ════════════════════════════════════════════════════ -->
+<div id="plots">
+  <div class="plot-wrap"><canvas id="c1"></canvas></div>
+  <div class="plot-wrap"><canvas id="c2"></canvas></div>
+  <div class="plot-wrap"><canvas id="c4"></canvas></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<!-- ══ Worker source (not executed directly) ════════════════════ -->
+<script id="worker-src" type="text/plain">
+
+// ── FFT (Cooley-Tukey, power-of-2) ───────────────────────────────────
+function fft(re, im) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      let t = re[i]; re[i] = re[j]; re[j] = t;
+      t = im[i]; im[i] = im[j]; im[j] = t;
+    }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = -2 * Math.PI / len;
+    const wRe = Math.cos(ang), wIm = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let cRe = 1, cIm = 0;
+      for (let k = 0; k < (len >> 1); k++) {
+        const p = i + k, q = p + (len >> 1);
+        const uRe = re[p], uIm = im[p];
+        const vRe = re[q]*cRe - im[q]*cIm;
+        const vIm = re[q]*cIm + im[q]*cRe;
+        re[p] = uRe+vRe; im[p] = uIm+vIm;
+        re[q] = uRe-vRe; im[q] = uIm-vIm;
+        const nr = cRe*wRe - cIm*wIm;
+        cIm = cRe*wIm + cIm*wRe; cRe = nr;
+      }
+    }
+  }
+}
+
+function ifft(re, im) {
+  const n = im.length;
+  for (let i = 0; i < n; i++) im[i] = -im[i];
+  fft(re, im);
+  for (let i = 0; i < n; i++) { re[i] /= n; im[i] = -im[i] / n; }
+}
+
+function fftshift(arr) {
+  const n = arr.length, s = Math.floor(n / 2);
+  const r = new Float64Array(n);
+  for (let i = 0; i < n - s; i++) r[i] = arr[i + s];
+  for (let i = 0; i < s; i++) r[n - s + i] = arr[i];
+  return r;
+}
+
+// ── Simulation state ──────────────────────────────────────────────────
+let N = 0, params = null;
+let r_E = null, r_I = null;
+let wFT = {};       // { EE, IE, EI, II } each { re, im, vec }
+let wkRe, wkIm;    // reusable FFT work buffers
+// pre-alloc output buffers
+let g_EE, g_IE, g_EI, g_II, G_E, G_I;
+
+let running = false;
+let pendingParams = null, paramsDirty = false;
+
+const dt = 0.5 / 1000;
+const tau_s = 30 / 1000;
+const STEPS_PER_TICK = 200;   // simulation steps between UI posts
+
+// ── Weight helpers ────────────────────────────────────────────────────
+function makeWeightVec(n, sig, amp, inv, bin) {
+  const w = new Float64Array(n);
+  const ctr = (Math.floor(n / 2) + 1) / n;
+  let mx = 0;
+  for (let i = 0; i < n; i++) {
+    const d = ((i + 1) / n - ctr) / sig;
+    w[i] = Math.exp(-0.5 * d * d);
+    if (w[i] > mx) mx = w[i];
+  }
+  for (let i = 0; i < n; i++) {
+    w[i] /= mx;
+    if (inv) w[i] = 1 - w[i];
+    if (bin) w[i] = w[i] >= 0.5 ? 1 : 0;
+    w[i] *= amp;
+  }
+  return w;
+}
+
+function computeWeightFT(w) {
+  const n = w.length;
+  const ws = fftshift(w);
+  const re = new Float64Array(ws);
+  const im = new Float64Array(n);
+  fft(re, im);
+  return { re, im };
+}
+
+function initWeights(p, n) {
+  for (const nm of ['EE','EI','IE','II']) {
+    const vec = makeWeightVec(n, p['sig_'+nm], p['amp_'+nm], p['inv_'+nm], p['bin_'+nm]);
+    const ft  = computeWeightFT(vec);
+    wFT[nm] = { re: ft.re, im: ft.im, vec };
+  }
+}
+
+function allocBuffers(n) {
+  wkRe = new Float64Array(n); wkIm = new Float64Array(n);
+  g_EE = new Float64Array(n); g_IE = new Float64Array(n);
+  g_EI = new Float64Array(n); g_II = new Float64Array(n);
+  G_E  = new Float64Array(n); G_I  = new Float64Array(n);
+  r_E  = new Float64Array(n); r_I  = new Float64Array(n);
+  r_E[Math.max(0, Math.floor(n / 2) - 1)] = 1; // seed bump
+}
+
+function applyParams(p) {
+  const newN = p.n;
+  const resize = newN !== N;
+  N = newN;
+  initWeights(p, N);
+  if (resize || r_E === null) allocBuffers(N);
+  params = p;
+}
+
+// ── Convolution (in-place, uses wkRe/wkIm) ───────────────────────────
+// writes result real-part into `out`
+function circConvInto(sig, kRe, kIm, out) {
+  out.set(sig);
+  wkIm.fill(0);
+  fft(out, wkIm);
+  for (let i = 0; i < N; i++) {
+    const a = out[i], b = wkIm[i], c = kRe[i], d = kIm[i];
+    out[i] = a*c - b*d; wkIm[i] = a*d + b*c;
+  }
+  ifft(out, wkIm);
+}
+
+// ── Poisson sampler ───────────────────────────────────────────────────
+function poissonSample(lam) {
+  if (lam <= 0) return 0;
+  if (lam > 20) {
+    // Normal approximation
+    const u = Math.random(), v = Math.random();
+    const z = Math.sqrt(-2*Math.log(u)) * Math.cos(2*Math.PI*v);
+    return Math.max(0, Math.round(lam + Math.sqrt(lam) * z));
+  }
+  const L = Math.exp(-lam); let k = 0, p = 1;
+  do { k++; p *= Math.random(); } while (p > L);
+  return k - 1;
+}
+
+// ── Main simulation tick ──────────────────────────────────────────────
+function tick() {
+  if (!running) return;
+
+  if (paramsDirty && pendingParams) {
+    applyParams(pendingParams);
+    pendingParams = null; paramsDirty = false;
+  }
+  if (!r_E) { setTimeout(tick, 10); return; }
+
+  const sp = params.spiking;
+
+  for (let s = 0; s < STEPS_PER_TICK; s++) {
+    circConvInto(r_E, wFT.EE.re, wFT.EE.im, g_EE);
+    circConvInto(r_E, wFT.IE.re, wFT.IE.im, g_IE);
+    circConvInto(r_I, wFT.EI.re, wFT.EI.im, g_EI);
+    circConvInto(r_I, wFT.II.re, wFT.II.im, g_II);
+
+    const bE = params.beta_E, bI = params.beta_I;
+    for (let i = 0; i < N; i++) {
+      G_E[i] = g_EE[i] + g_EI[i] + bE;
+      G_I[i] = g_IE[i] + g_II[i] + bI;
+    }
+    for (let i = 0; i < N; i++) {
+      const fE = G_E[i] > 0 ? G_E[i] : 0;
+      const fI = G_I[i] > 0 ? G_I[i] : 0;
+      const sE = sp ? poissonSample(fE * dt) : fE * dt;
+      const sI = sp ? poissonSample(fI * dt) : fI * dt;
+      r_E[i] += sE - r_E[i] * dt / tau_s;
+      r_I[i] += sI - r_I[i] * dt / tau_s;
+    }
+  }
+
+  // Divergence guard: reset if NaN/Inf
+  let ok = true;
+  for (let i = 0; i < N; i++) {
+    if (!isFinite(r_E[i]) || !isFinite(r_I[i])) { ok = false; break; }
+  }
+  if (!ok) allocBuffers(N);
+
+  self.postMessage({
+    type: 'update', n: N,
+    r_E:  Array.from(r_E),  r_I:  Array.from(r_I),
+    g_EE: Array.from(g_EE), g_IE: Array.from(g_IE),
+    g_EI: Array.from(g_EI), g_II: Array.from(g_II),
+    G_E:  Array.from(G_E),  G_I:  Array.from(G_I),
+    w_EE: Array.from(wFT.EE.vec), w_IE: Array.from(wFT.IE.vec),
+    w_EI: Array.from(wFT.EI.vec), w_II: Array.from(wFT.II.vec),
+    beta_E: params.beta_E, beta_I: params.beta_I
+  });
+
+  setTimeout(tick, 0);
+}
+
+// ── Message handler ───────────────────────────────────────────────────
+self.onmessage = function(e) {
+  const d = e.data;
+  if (d.type === 'start') {
+    pendingParams = d.params; paramsDirty = true;
+    // Always re-seed state on start
+    r_E = null;
+    running = true;
+    tick();
+  } else if (d.type === 'stop') {
+    running = false;
+  } else if (d.type === 'params') {
+    pendingParams = d.params; paramsDirty = true;
+  }
+};
+</script>
+
+<!-- ══ Main thread ══════════════════════════════════════════════════ -->
+<script>
+// ── Sigma log-scale helpers (0.01 – 10, 3 decades) ───────────────────
+const sigToSlider = s => Math.log10(s / 0.001) / 4;
+const sliderToSig = v => 0.001 * Math.pow(10, v * 4);
+const fmtSig = s => s < 0.1 ? s.toFixed(3) : s < 1 ? s.toFixed(2) : s.toFixed(1);
+
+// ── Weight row config ─────────────────────────────────────────────────
+const WT_ROWS = [
+  { id:'EE', sigDef:0.10, ampDef: 0, ampMin:0, ampMax:200, negAmp:false, invDef:false, binDef:false },
+  { id:'IE', sigDef:0.05, ampDef:90, ampMin:0, ampMax:200, negAmp:false, invDef:false, binDef:false },
+  { id:'EI', sigDef:0.10, ampDef:80, ampMin:0, ampMax:200, negAmp:true,  invDef:true,  binDef:false },
+  { id:'II', sigDef:0.10, ampDef: 0, ampMin:0, ampMax:200, negAmp:true,  invDef:true,  binDef:false },
+];
+
+// Build weight table rows
+const tbody = document.getElementById('wtbody');
+for (const r of WT_ROWS) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td>w_${r.id}</td>
+    <td><input type="range" id="sig_${r.id}" min="0" max="1" step="0.001" value="${sigToSlider(r.sigDef).toFixed(3)}"></td>
+    <td><span class="sval" id="sig_${r.id}_v">${fmtSig(r.sigDef)}</span></td>
+    <td><input type="range" id="amp_${r.id}" min="${r.ampMin}" max="${r.ampMax}" step="1" value="${r.ampDef}"></td>
+    <td><span class="sval" id="amp_${r.id}_v">${r.negAmp ? -r.ampDef : r.ampDef}</span></td>
+    <td style="text-align:center">
+      <label class="tog"><input type="checkbox" id="inv_${r.id}" ${r.invDef?'checked':''}>
+      <span class="tog-track"></span></label>
+    </td>
+    <td style="text-align:center">
+      <label class="tog"><input type="checkbox" id="bin_${r.id}" ${r.binDef?'checked':''}>
+      <span class="tog-track"></span></label>
+    </td>`;
+  tbody.appendChild(tr);
+}
+
+// ── Chart helpers ─────────────────────────────────────────────────────
+const BLUE = '#4c9be8', RED = '#e06c75';
+
+function ds(label, color, dash) {
+  return {
+    label, data: [],
+    borderColor: color, backgroundColor: 'transparent',
+    borderWidth: 1.5, borderDash: dash,
+    pointRadius: 0, tension: 0
+  };
+}
+
+// Custom plugin: draws a line-style legend to the right of the plot area,
+// respecting each dataset's borderDash pattern.
+const lineLegendPlugin = {
+  id: 'lineLegend',
+  afterDraw(chart) {
+    const { ctx, chartArea, data } = chart;
+    if (!chartArea) return;
+    const dsets = data.datasets;
+    const lineLen = 22, gap = 5, rowH = 15;
+    const totalH = dsets.length * rowH;
+    const x0 = chartArea.right + 10;
+    let y = (chartArea.top + chartArea.bottom) / 2 - totalH / 2 + rowH / 2;
+
+    ctx.save();
+    ctx.font = '10px "Segoe UI", system-ui, sans-serif';
+    ctx.textBaseline = 'middle';
+
+    for (let i = 0; i < dsets.length; i++) {
+      const d = dsets[i];
+      const alpha = chart.isDatasetVisible(i) ? 1 : 0.35;
+      ctx.globalAlpha = alpha;
+
+      // Draw line segment
+      ctx.strokeStyle = d.borderColor;
+      ctx.lineWidth = d.borderWidth || 1.5;
+      ctx.lineCap = 'round';
+      ctx.setLineDash(d.borderDash || []);
+      ctx.beginPath();
+      ctx.moveTo(x0, y);
+      ctx.lineTo(x0 + lineLen, y);
+      ctx.stroke();
+
+      // Draw label
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#8b949e';
+      ctx.fillText(d.label, x0 + lineLen + gap, y);
+
+      y += rowH;
+    }
+    ctx.restore();
+  }
+};
+
+function mkChart(id, title, datasets, xlabel) {
+  return new Chart(document.getElementById(id).getContext('2d'), {
+    type: 'line',
+    data: { labels: [], datasets },
+    options: {
+      animation: false,
+      responsive: true, maintainAspectRatio: false,
+      layout: { padding: { right: 72 } },
+      plugins: {
+        title: { display: false },
+        legend: { display: false },
+      },
+      scales: {
+        x: {
+          min: 1, max: 128,
+          title: { display: !!xlabel, text: xlabel || '', color: '#8b949e', font: { size: 10 } },
+          ticks: { color: '#6e7681', maxTicksLimit: 8, font: { size: 9 } },
+          grid: { color: '#21262d' }
+        },
+        y: {
+          title: { display: true, text: title, color: '#8b949e', font: { size: 10 } },
+          ticks: { color: '#6e7681', font: { size: 9 } },
+          grid: { color: '#21262d' }
+        }
+      }
+    },
+    plugins: [lineLegendPlugin],
+  });
+}
+
+const charts = [
+  mkChart('c1', 'Weights', [
+    ds('w_EE', BLUE, []),
+    ds('w_IE', BLUE, [3,4]),
+    ds('w_EI', RED,  [3,4]),
+    ds('w_II', RED,  []),
+  ]),
+  mkChart('c2', 'Firing rates', [
+    ds('E', BLUE, []),
+    ds('I', RED,  []),
+  ]),
+  mkChart('c4', 'Inputs', [
+    ds('g_EE', BLUE, []),
+    ds('g_IE', BLUE, [3,4]),
+    ds('g_EI', RED,  []),
+    ds('g_II', RED,  [3,4]),
+    ds('β_E',  BLUE, [8,4]),
+    ds('β_I',  RED,  [8,4]),
+  ], 'Neuron'),
+];
+
+let currentN = 0;
+
+function updateCharts(d) {
+  if (d.n !== currentN) {
+    currentN = d.n;
+    const labels = Array.from({length: d.n}, (_, i) => i + 1);
+    for (const ch of charts) {
+      ch.data.labels = labels;
+      ch.options.scales.x.min = 1;
+      ch.options.scales.x.max = d.n;
+    }
+  }
+  const betaE = new Array(d.n).fill(d.beta_E);
+  const betaI = new Array(d.n).fill(d.beta_I);
+
+  const payloads = [
+    [d.w_EE, d.w_IE, d.w_EI, d.w_II],
+    [d.r_E, d.r_I],
+    [d.g_EE, d.g_IE, d.g_EI, d.g_II, betaE, betaI],
+  ];
+  for (let ci = 0; ci < charts.length; ci++) {
+    const ch = charts[ci];
+    for (let di = 0; di < ch.data.datasets.length; di++) {
+      ch.data.datasets[di].data = payloads[ci][di];
+    }
+    ch.update('none');
+  }
+}
+
+// ── Web worker ────────────────────────────────────────────────────────
+const src = document.getElementById('worker-src').textContent;
+const worker = new Worker(URL.createObjectURL(new Blob([src], { type: 'application/javascript' })));
+
+let pendingUpdate = null;
+worker.onmessage = e => { if (e.data.type === 'update') pendingUpdate = e.data; };
+
+(function renderLoop() {
+  if (pendingUpdate) { updateCharts(pendingUpdate); pendingUpdate = null; }
+  requestAnimationFrame(renderLoop);
+})();
+
+// ── Parameter collection ──────────────────────────────────────────────
+function getParams() {
+  const p = {
+    n:       Math.pow(2, +document.getElementById('n_exp').value),
+    spiking: document.getElementById('use_spiking').checked,
+    beta_E:  +document.getElementById('beta_E').value,
+    beta_I:  +document.getElementById('beta_I').value,
+  };
+  for (const r of WT_ROWS) {
+    p['sig_'+r.id] = sliderToSig(+document.getElementById('sig_'+r.id).value);
+    const ampRaw = +document.getElementById('amp_'+r.id).value;
+    p['amp_'+r.id] = r.negAmp ? -ampRaw : ampRaw;
+    p['inv_'+r.id] =  document.getElementById('inv_'+r.id).checked;
+    p['bin_'+r.id] =  document.getElementById('bin_'+r.id).checked;
+  }
+  return p;
+}
+
+function sendParams() { worker.postMessage({ type: 'params', params: getParams() }); }
+
+// ── Start / Stop ──────────────────────────────────────────────────────
+let simRunning = false;
+
+document.getElementById('startstop').addEventListener('click', () => {
+  const btn = document.getElementById('startstop');
+  if (!simRunning) {
+    simRunning = true;
+    btn.textContent = 'Stop';
+    btn.className = 'running';
+    worker.postMessage({ type: 'start', params: getParams() });
+  } else {
+    simRunning = false;
+    btn.textContent = 'Start';
+    btn.className = 'stopped';
+    worker.postMessage({ type: 'stop' });
+  }
+});
+
+// ── Reset ─────────────────────────────────────────────────────────────
+document.getElementById('resetbtn').addEventListener('click', () => {
+  document.getElementById('use_spiking').checked = true;
+  document.getElementById('n_exp').value = 7;
+  document.getElementById('n_val').textContent = 128;
+  document.getElementById('beta_E').value = 400;
+  document.getElementById('beta_E_val').textContent = 400;
+  document.getElementById('beta_I').value = 0;
+  document.getElementById('beta_I_val').textContent = 0;
+  for (const r of WT_ROWS) {
+    document.getElementById('sig_'+r.id).value = sigToSlider(r.sigDef).toFixed(3);
+    document.getElementById('sig_'+r.id+'_v').textContent = fmtSig(r.sigDef);
+    document.getElementById('amp_'+r.id).value = r.ampDef;
+    document.getElementById('amp_'+r.id+'_v').textContent = r.negAmp ? -r.ampDef : r.ampDef;
+    document.getElementById('inv_'+r.id).checked = r.invDef;
+    document.getElementById('bin_'+r.id).checked = r.binDef;
+  }
+  sendParams();
+});
+
+// ── Wire up all controls ──────────────────────────────────────────────
+document.getElementById('use_spiking').addEventListener('change', sendParams);
+
+document.getElementById('n_exp').addEventListener('input', e => {
+  document.getElementById('n_val').textContent = Math.pow(2, +e.target.value);
+  sendParams();
+});
+document.getElementById('beta_E').addEventListener('input', e => {
+  document.getElementById('beta_E_val').textContent = e.target.value; sendParams();
+});
+document.getElementById('beta_I').addEventListener('input', e => {
+  document.getElementById('beta_I_val').textContent = e.target.value; sendParams();
+});
+
+for (const r of WT_ROWS) {
+  document.getElementById('sig_'+r.id).addEventListener('input', e => {
+    document.getElementById('sig_'+r.id+'_v').textContent = fmtSig(sliderToSig(+e.target.value)); sendParams();
+  });
+  document.getElementById('amp_'+r.id).addEventListener('input', e => {
+    const v = +e.target.value;
+    document.getElementById('amp_'+r.id+'_v').textContent = r.negAmp ? -v : v; sendParams();
+  });
+  document.getElementById('inv_'+r.id).addEventListener('change', sendParams);
+  document.getElementById('bin_'+r.id).addEventListener('change', sendParams);
+}
+</script>
+</body>
+</html>
