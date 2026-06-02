@@ -13,13 +13,13 @@ body {
   display: flex;
   height: 100vh;
   overflow: hidden;
-  font-size: 13px;
+  font-size: 16px;
 }
 
 /* ── Left panel ─────────────────────────────────────────────── */
 #controls {
-  width: 310px;
-  min-width: 280px;
+  width: 555px;
+  min-width: 510px;
   background: #161b22;
   border-right: 1px solid #30363d;
   padding: 12px 12px;
@@ -44,10 +44,10 @@ body {
 /* ── Start / Stop button ─────────────────────────────────────── */
 #startstop {
   width: 100%;
-  padding: 7px 0;
+  padding: 9px 0;
   border: none;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 600;
   cursor: pointer;
   letter-spacing: 0.04em;
@@ -63,12 +63,12 @@ body {
 }
 #resetbtn {
   width: 100%;
-  padding: 7px 0;
+  padding: 9px 0;
   border: 1px solid #30363d;
   border-radius: 6px;
   background: #21262d;
   color: #8b949e;
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 500;
   cursor: pointer;
   letter-spacing: 0.04em;
@@ -81,7 +81,7 @@ body {
 
 /* ── Section headers ─────────────────────────────────────────── */
 .sec-title {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -101,8 +101,8 @@ body {
 .lbl {
   color: #8b949e;
   white-space: nowrap;
-  min-width: 52px;
-  font-size: 12px;
+  min-width: 70px;
+  font-size: 15px;
 }
 
 /* ── Range sliders ───────────────────────────────────────────── */
@@ -124,9 +124,9 @@ input[type=range]::-webkit-slider-thumb {
   cursor: pointer;
 }
 .sval {
-  font-size: 11px;
+  font-size: 13px;
   color: #6e7681;
-  min-width: 34px;
+  min-width: 42px;
   text-align: right;
 }
 
@@ -156,18 +156,74 @@ input:checked ~ .tog-track::before {
 /* ── Weights table ───────────────────────────────────────────── */
 .wt { width: 100%; border-collapse: collapse; }
 .wt th {
-  font-size: 10px; color: #6e7681;
+  font-size: 12px; color: #6e7681;
   text-align: center; padding: 2px 2px 5px;
   font-weight: 400;
 }
 .wt th:first-child { text-align: left; }
-.wt td { padding: 3px 2px; vertical-align: middle; }
+.wt td { padding: 4px 3px; vertical-align: middle; }
 .wt td:first-child {
-  font-size: 12px; color: #8b949e;
-  white-space: nowrap; padding-right: 4px;
+  font-size: 14px; color: #8b949e;
+  white-space: nowrap; padding-right: 6px;
 }
-.wt td input[type=range] { width: 100%; min-width: 40px; }
-.wt .sval { min-width: 28px; font-size: 10px; }
+.wt td input[type=range] { width: 100%; min-width: 50px; }
+.wt .sval { min-width: 36px; font-size: 12px; }
+
+/* ── Presets ─────────────────────────────────────────────────── */
+input[type=text]#preset_name {
+  flex: 1;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  color: #c9d1d9;
+  padding: 6px 8px;
+  font-size: 14px;
+  outline: none;
+}
+input[type=text]#preset_name:focus { border-color: #58a6ff; }
+.preset-row {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.preset-btn {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  background: #21262d;
+  color: #c9d1d9;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.preset-btn:hover { background: #30363d; }
+.preset-del {
+  width: 30px;
+  padding: 0;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  background: #21262d;
+  color: #8b949e;
+  font-size: 14px;
+  cursor: pointer;
+  line-height: 1;
+}
+.preset-del:hover { background: #b91c1c; color: #fecaca; border-color: #b91c1c; }
+.preset-action {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  background: #21262d;
+  color: #8b949e;
+  font-size: 13px;
+  cursor: pointer;
+}
+.preset-action:hover { background: #30363d; color: #c9d1d9; }
 </style>
 </head>
 <body>
@@ -176,7 +232,6 @@ input:checked ~ .tog-track::before {
 <div id="controls">
 
   <button id="startstop" class="stopped">Start</button>
-  <button id="resetbtn">Reset parameters</button>
 
   <!-- Spiking -->
   <div class="ctrl-row">
@@ -209,6 +264,11 @@ input:checked ~ .tog-track::before {
       </thead>
       <tbody id="wtbody"></tbody>
     </table>
+    <div class="ctrl-row" style="margin-top: 6px;">
+      <span class="lbl">envelope</span>
+      <input type="range" id="sig_env" min="0" max="1" step="0.001" value="1.000">
+      <span class="sval" id="sig_env_v">10.0</span>
+    </div>
   </div>
 
   <!-- Uniform Input -->
@@ -224,6 +284,16 @@ input:checked ~ .tog-track::before {
       <input type="range" id="beta_I" min="0" max="1000" step="1" value="0">
       <span class="sval" id="beta_I_val">0</span>
     </div>
+  </div>
+
+  <!-- Presets -->
+  <div>
+    <div class="sec-title">Presets</div>
+    <div class="preset-row">
+      <input type="text" id="preset_name" placeholder="preset name">
+      <button id="preset_save" class="preset-del" style="width:auto; padding:0 12px;">Save</button>
+    </div>
+    <div id="preset_list"></div>
   </div>
 
 </div>
@@ -330,8 +400,10 @@ function computeWeightFT(w) {
 }
 
 function initWeights(p, n) {
+  const env = makeWeightVec(n, p.sig_env, 1.0, false, false);
   for (const nm of ['EE','EI','IE','II']) {
     const vec = makeWeightVec(n, p['sig_'+nm], p['amp_'+nm], p['inv_'+nm], p['bin_'+nm]);
+    for (let i = 0; i < n; i++) vec[i] *= env[i];
     const ft  = computeWeightFT(vec);
     wFT[nm] = { re: ft.re, im: ft.im, vec };
   }
@@ -462,11 +534,12 @@ const fmtSig = s => s < 0.1 ? s.toFixed(3) : s < 1 ? s.toFixed(2) : s.toFixed(1)
 
 // ── Weight row config ─────────────────────────────────────────────────
 const WT_ROWS = [
-  { id:'EE', sigDef:0.10, ampDef: 0, ampMin:0, ampMax:200, negAmp:false, invDef:false, binDef:false },
-  { id:'IE', sigDef:0.05, ampDef:90, ampMin:0, ampMax:200, negAmp:false, invDef:false, binDef:false },
-  { id:'EI', sigDef:0.10, ampDef:80, ampMin:0, ampMax:200, negAmp:true,  invDef:true,  binDef:false },
-  { id:'II', sigDef:0.10, ampDef: 0, ampMin:0, ampMax:200, negAmp:true,  invDef:true,  binDef:false },
+  { id:'EE', sigDef:0.02, ampDef:  0, ampMin:0, ampMax:200, negAmp:false, invDef:false, binDef:false },
+  { id:'IE', sigDef:0.02, ampDef:100, ampMin:0, ampMax:200, negAmp:false, invDef:false, binDef:false },
+  { id:'EI', sigDef:0.08, ampDef:100, ampMin:0, ampMax:200, negAmp:true,  invDef:true,  binDef:false },
+  { id:'II', sigDef:0.08, ampDef:  0, ampMin:0, ampMax:200, negAmp:true,  invDef:true,  binDef:false },
 ];
+const SIG_ENV_DEF = 10;
 
 // Build weight table rows
 const tbody = document.getElementById('wtbody');
@@ -515,7 +588,7 @@ const lineLegendPlugin = {
     let y = (chartArea.top + chartArea.bottom) / 2 - totalH / 2 + rowH / 2;
 
     ctx.save();
-    ctx.font = '10px "Segoe UI", system-ui, sans-serif';
+    ctx.font = '13px "Segoe UI", system-ui, sans-serif';
     ctx.textBaseline = 'middle';
 
     for (let i = 0; i < dsets.length; i++) {
@@ -559,13 +632,13 @@ function mkChart(id, title, datasets, xlabel) {
       scales: {
         x: {
           min: 1, max: 128,
-          title: { display: !!xlabel, text: xlabel || '', color: '#8b949e', font: { size: 10 } },
-          ticks: { color: '#6e7681', maxTicksLimit: 8, font: { size: 9 } },
+          title: { display: !!xlabel, text: xlabel || '', color: '#8b949e', font: { size: 13 } },
+          ticks: { color: '#6e7681', maxTicksLimit: 8, font: { size: 12 } },
           grid: { color: '#21262d' }
         },
         y: {
-          title: { display: true, text: title, color: '#8b949e', font: { size: 10 } },
-          ticks: { color: '#6e7681', font: { size: 9 } },
+          title: { display: true, text: title, color: '#8b949e', font: { size: 13 } },
+          ticks: { color: '#6e7681', font: { size: 12 } },
           grid: { color: '#21262d' }
         }
       }
@@ -576,20 +649,20 @@ function mkChart(id, title, datasets, xlabel) {
 
 const charts = [
   mkChart('c1', 'Weights', [
-    ds('w_EE', BLUE, [3,4]),
-    ds('w_IE', BLUE, []),
-    ds('w_EI', RED,  []),
-    ds('w_II', RED,  [3,4]),
+    ds('w_EE', BLUE, []),
+    ds('w_IE', BLUE, [3,4]),
+    ds('w_EI', RED,  [3,4]),
+    ds('w_II', RED,  []),
   ]),
   mkChart('c2', 'Firing rates', [
     ds('E', BLUE, []),
     ds('I', RED,  []),
   ]),
   mkChart('c4', 'Inputs', [
-    ds('g_EE', BLUE, [3,4]),
-    ds('g_IE', BLUE, []),
-    ds('g_EI', RED,  []),
-    ds('g_II', RED,  [3,4]),
+    ds('g_EE', BLUE, []),
+    ds('g_IE', BLUE, [3,4]),
+    ds('g_EI', RED,  [3,4]),
+    ds('g_II', RED,  []),
     ds('β_E',  BLUE, [8,4]),
     ds('β_I',  RED,  [8,4]),
   ], 'Neuron'),
@@ -643,6 +716,7 @@ function getParams() {
     spiking: document.getElementById('use_spiking').checked,
     beta_E:  +document.getElementById('beta_E').value,
     beta_I:  +document.getElementById('beta_I').value,
+    sig_env: sliderToSig(+document.getElementById('sig_env').value),
   };
   for (const r of WT_ROWS) {
     p['sig_'+r.id] = sliderToSig(+document.getElementById('sig_'+r.id).value);
@@ -674,26 +748,6 @@ document.getElementById('startstop').addEventListener('click', () => {
   }
 });
 
-// ── Reset ─────────────────────────────────────────────────────────────
-document.getElementById('resetbtn').addEventListener('click', () => {
-  document.getElementById('use_spiking').checked = true;
-  document.getElementById('n_exp').value = 7;
-  document.getElementById('n_val').textContent = 128;
-  document.getElementById('beta_E').value = 400;
-  document.getElementById('beta_E_val').textContent = 400;
-  document.getElementById('beta_I').value = 0;
-  document.getElementById('beta_I_val').textContent = 0;
-  for (const r of WT_ROWS) {
-    document.getElementById('sig_'+r.id).value = sigToSlider(r.sigDef).toFixed(3);
-    document.getElementById('sig_'+r.id+'_v').textContent = fmtSig(r.sigDef);
-    document.getElementById('amp_'+r.id).value = r.ampDef;
-    document.getElementById('amp_'+r.id+'_v').textContent = r.negAmp ? -r.ampDef : r.ampDef;
-    document.getElementById('inv_'+r.id).checked = r.invDef;
-    document.getElementById('bin_'+r.id).checked = r.binDef;
-  }
-  sendParams();
-});
-
 // ── Wire up all controls ──────────────────────────────────────────────
 document.getElementById('use_spiking').addEventListener('change', sendParams);
 
@@ -707,6 +761,10 @@ document.getElementById('beta_E').addEventListener('input', e => {
 document.getElementById('beta_I').addEventListener('input', e => {
   document.getElementById('beta_I_val').textContent = e.target.value; sendParams();
 });
+document.getElementById('sig_env').addEventListener('input', e => {
+  document.getElementById('sig_env_v').textContent = fmtSig(sliderToSig(+e.target.value));
+  sendParams();
+});
 
 for (const r of WT_ROWS) {
   document.getElementById('sig_'+r.id).addEventListener('input', e => {
@@ -719,6 +777,97 @@ for (const r of WT_ROWS) {
   document.getElementById('inv_'+r.id).addEventListener('change', sendParams);
   document.getElementById('bin_'+r.id).addEventListener('change', sendParams);
 }
+
+// ── Presets ───────────────────────────────────────────────────────────
+const PRESET_STORAGE_KEY = 'ring_attractor_presets';
+const presets = {};
+
+function persistPresets() {
+  try {
+    localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(presets));
+  } catch (err) {
+    console.warn('Failed to persist presets:', err);
+  }
+}
+
+function restorePresets() {
+  try {
+    const raw = localStorage.getItem(PRESET_STORAGE_KEY);
+    if (!raw) return;
+    const loaded = JSON.parse(raw);
+    if (loaded && typeof loaded === 'object') Object.assign(presets, loaded);
+  } catch (err) {
+    console.warn('Failed to restore presets:', err);
+  }
+}
+
+function loadPreset(p) {
+  document.getElementById('use_spiking').checked = !!p.spiking;
+  const n_exp = Math.round(Math.log2(p.n));
+  document.getElementById('n_exp').value = n_exp;
+  document.getElementById('n_val').textContent = Math.pow(2, n_exp);
+  document.getElementById('beta_E').value = p.beta_E;
+  document.getElementById('beta_E_val').textContent = p.beta_E;
+  document.getElementById('beta_I').value = p.beta_I;
+  document.getElementById('beta_I_val').textContent = p.beta_I;
+  document.getElementById('sig_env').value = sigToSlider(p.sig_env).toFixed(3);
+  document.getElementById('sig_env_v').textContent = fmtSig(p.sig_env);
+  for (const r of WT_ROWS) {
+    const sig = p['sig_'+r.id];
+    document.getElementById('sig_'+r.id).value = sigToSlider(sig).toFixed(3);
+    document.getElementById('sig_'+r.id+'_v').textContent = fmtSig(sig);
+    const ampSigned = p['amp_'+r.id];
+    const ampRaw = r.negAmp ? -ampSigned : ampSigned;
+    document.getElementById('amp_'+r.id).value = ampRaw;
+    document.getElementById('amp_'+r.id+'_v').textContent = r.negAmp ? -ampRaw : ampRaw;
+    document.getElementById('inv_'+r.id).checked = !!p['inv_'+r.id];
+    document.getElementById('bin_'+r.id).checked = !!p['bin_'+r.id];
+  }
+  sendParams();
+}
+
+function renderPresets() {
+  const list = document.getElementById('preset_list');
+  list.innerHTML = '';
+  for (const name of Object.keys(presets)) {
+    const row = document.createElement('div');
+    row.className = 'preset-row';
+    const loadBtn = document.createElement('button');
+    loadBtn.textContent = name;
+    loadBtn.className = 'preset-btn';
+    loadBtn.title = 'Load ' + name;
+    loadBtn.addEventListener('click', () => loadPreset(presets[name]));
+    const delBtn = document.createElement('button');
+    delBtn.textContent = '×';
+    delBtn.className = 'preset-del';
+    delBtn.title = 'Delete ' + name;
+    delBtn.addEventListener('click', () => {
+      delete presets[name];
+      persistPresets();
+      renderPresets();
+    });
+    row.appendChild(loadBtn);
+    row.appendChild(delBtn);
+    list.appendChild(row);
+  }
+}
+
+document.getElementById('preset_save').addEventListener('click', () => {
+  const nameInput = document.getElementById('preset_name');
+  const nm = nameInput.value.trim();
+  if (!nm) return;
+  presets[nm] = getParams();
+  nameInput.value = '';
+  persistPresets();
+  renderPresets();
+});
+
+document.getElementById('preset_name').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('preset_save').click();
+});
+
+restorePresets();
+renderPresets();
 </script>
 </body>
 </html>
