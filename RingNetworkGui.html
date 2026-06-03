@@ -33,11 +33,32 @@ body {
 #plots {
   flex: 1;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   padding: 6px 6px 6px 8px;
-  gap: 4px;
+  gap: 8px;
   overflow: hidden;
   background: #0d1117;
+}
+#plots-left, #plots-right {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+  overflow: hidden;
+}
+#plots-left  { flex: 1; min-width: 0; }
+#plots-right { width: 280px; flex-shrink: 0; }
+#phase-controls {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #8b949e;
 }
 .plot-wrap { flex: 1; position: relative; min-height: 0; }
 
@@ -300,9 +321,24 @@ input[type=text]#preset_name:focus { border-color: #58a6ff; }
 
 <!-- ══ Plots ════════════════════════════════════════════════════ -->
 <div id="plots">
-  <div class="plot-wrap"><canvas id="c1"></canvas></div>
-  <div class="plot-wrap"><canvas id="c2"></canvas></div>
-  <div class="plot-wrap"><canvas id="c4"></canvas></div>
+  <div id="plots-left">
+    <div class="plot-wrap"><canvas id="c1"></canvas></div>
+    <div class="plot-wrap"><canvas id="c2"></canvas></div>
+    <div class="plot-wrap"><canvas id="c4"></canvas></div>
+  </div>
+  <div id="plots-right">
+    <div id="phase-controls">
+      <label class="tog">
+        <input type="checkbox" id="phase_binarize">
+        <span class="tog-track"></span>
+      </label>
+      <span>Binarize (count w &gt; 1e-3)</span>
+    </div>
+    <div class="plot-wrap"><canvas id="c_EE"></canvas></div>
+    <div class="plot-wrap"><canvas id="c_EI"></canvas></div>
+    <div class="plot-wrap"><canvas id="c_IE"></canvas></div>
+    <div class="plot-wrap"><canvas id="c_II"></canvas></div>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -534,10 +570,10 @@ const fmtSig = s => s < 0.1 ? s.toFixed(3) : s < 1 ? s.toFixed(2) : s.toFixed(1)
 
 // ── Weight row config ─────────────────────────────────────────────────
 const WT_ROWS = [
-  { id:'EE', sigDef:0.02, ampDef:  0, ampMin:0, ampMax:200, negAmp:false, invDef:false, binDef:false },
-  { id:'IE', sigDef:0.02, ampDef:100, ampMin:0, ampMax:200, negAmp:false, invDef:false, binDef:false },
-  { id:'EI', sigDef:0.08, ampDef:100, ampMin:0, ampMax:200, negAmp:true,  invDef:true,  binDef:false },
-  { id:'II', sigDef:0.08, ampDef:  0, ampMin:0, ampMax:200, negAmp:true,  invDef:true,  binDef:false },
+  { id:'EE', sigDef:0.04, ampDef:0, ampMin:0, ampMax:50, negAmp:false, invDef:false, binDef:false },
+  { id:'IE', sigDef:0.04, ampDef:8, ampMin:0, ampMax:50, negAmp:false, invDef:false, binDef:false },
+  { id:'EI', sigDef:0.04, ampDef:8, ampMin:0, ampMax:50, negAmp:true,  invDef:true,  binDef:false },
+  { id:'II', sigDef:0.04, ampDef:0, ampMin:0, ampMax:50, negAmp:true,  invDef:true,  binDef:false },
 ];
 const SIG_ENV_DEF = 10;
 
@@ -660,13 +696,211 @@ const charts = [
   ]),
   mkChart('c4', 'Inputs', [
     ds('g_EE', BLUE, []),
-    ds('g_IE', BLUE, [3,4]),
-    ds('g_EI', RED,  [3,4]),
+    ds('g_EI', BLUE, [3,4]),
+    ds('g_IE', RED,  [3,4]),
     ds('g_II', RED,  []),
     ds('β_E',  BLUE, [8,4]),
     ds('β_I',  RED,  [8,4]),
   ], 'Neuron'),
 ];
+
+// ── Phase-difference vs weight (small column on the right) ─────────────
+const NBINS = 30;
+// Match the Weights plot: source-pop colour, cross-pop dashed
+const PHASE_STYLES = {
+  EE: { color: BLUE, dash: []     },
+  IE: { color: BLUE, dash: [3, 4] },
+  EI: { color: RED,  dash: [3, 4] },
+  II: { color: RED,  dash: []     },
+};
+let phaseBinarize = false; // false: mean |w| ; true: count of pairs with |w| > 1
+const BIN_WEIGHT_THRESH = 1e-3;
+function phaseYLabel(tk) {
+  return phaseBinarize ? `# conn ${tk}` : `⟨w_${tk}⟩`;
+}
+
+function mkPhaseChart(id, label, color, dash) {
+  return new Chart(document.getElementById(id).getContext('2d'), {
+    type: 'line',
+    data: { labels: [], datasets: [{
+      label, data: [],
+      borderColor: color, backgroundColor: 'transparent',
+      borderWidth: 1.5, borderDash: dash,
+      pointRadius: 0, tension: 0, spanGaps: false,
+    }] },
+    options: {
+      animation: false,
+      responsive: true, maintainAspectRatio: false,
+      layout: { padding: { right: 8, top: 4 } },
+      plugins: { title: { display: false }, legend: { display: false } },
+      scales: {
+        x: {
+          type: 'linear', min: 0, max: 1,
+          title: { display: true, text: 'phase similarity', color: '#8b949e', font: { size: 11 } },
+          ticks: { color: '#6e7681', maxTicksLimit: 4, font: { size: 10 },
+                   callback: v => v.toFixed(2) },
+          grid: { color: '#21262d' }
+        },
+        y: {
+          title: { display: true, text: phaseYLabel(label), color: '#8b949e', font: { size: 11 } },
+          ticks: { color: '#6e7681', font: { size: 10 },
+                   callback: v => {
+                     const a = Math.abs(v);
+                     if (a < 1e-6) return '0';
+                     if (a < 0.01 || a >= 1000) return v.toExponential(1);
+                     return v.toFixed(2);
+                   } },
+          grid: { color: '#21262d' }
+        }
+      }
+    }
+  });
+}
+
+const phaseCharts = {
+  EE: mkPhaseChart('c_EE', 'EE', PHASE_STYLES.EE.color, PHASE_STYLES.EE.dash),
+  EI: mkPhaseChart('c_EI', 'EI', PHASE_STYLES.EI.color, PHASE_STYLES.EI.dash),
+  IE: mkPhaseChart('c_IE', 'IE', PHASE_STYLES.IE.color, PHASE_STYLES.IE.dash),
+  II: mkPhaseChart('c_II', 'II', PHASE_STYLES.II.color, PHASE_STYLES.II.dash),
+};
+
+let phaseAcc = null;       // { EE: { val: Float64Array(NBINS) }, ... }  EWMA of per-bin metric
+// bin b has |Δφ| center = (b + 0.5)·π/NBINS;  similarity = (π − |Δφ|)/π = 1 − (b + 0.5)/NBINS
+const _binCenters = Array.from({length: NBINS}, (_, i) => 1 - (i + 0.5) / NBINS);
+const EWMA_ALPHA = 0.1;    // 0..1; larger = more reactive, less smooth
+
+function updatePhaseYLabels() {
+  for (const tk of ['EE','EI','IE','II']) {
+    const ch = phaseCharts[tk];
+    ch.options.scales.y.title.text = phaseYLabel(tk);
+    ch.update('none');
+  }
+}
+
+function resetPhaseAcc() {
+  phaseAcc = {};
+  for (const k of ['EE','EI','IE','II']) {
+    const val = new Float64Array(NBINS);
+    val.fill(NaN);
+    phaseAcc[k] = { val };
+  }
+  for (const k of ['EE','EI','IE','II']) {
+    const ch = phaseCharts[k];
+    ch.data.datasets[0].data = _binCenters.map(x => ({ x, y: NaN }));
+    ch.update('none');
+  }
+}
+resetPhaseAcc();
+
+function computePhases(r, n) {
+  // Naive DFT over k = 1..n/2, pick mode with largest magnitude.
+  let bestK = 1, bestMag2 = -1, bestRe = 0, bestIm = 0;
+  const twoPiOverN = 2 * Math.PI / n;
+  const kMax = Math.max(1, Math.floor(n / 2));
+  for (let k = 1; k <= kMax; k++) {
+    let re = 0, im = 0;
+    for (let i = 0; i < n; i++) {
+      const a = twoPiOverN * k * i;
+      const ri = r[i];
+      re += ri * Math.cos(a);
+      im += ri * Math.sin(a);
+    }
+    const m2 = re*re + im*im;
+    if (m2 > bestMag2) { bestMag2 = m2; bestK = k; bestRe = re; bestIm = im; }
+  }
+  if (bestMag2 < 1e-12) return null;  // pattern is silent / undefined
+  const theta0 = Math.atan2(bestIm, bestRe);
+  const phases = new Float64Array(n);
+  const TWO_PI = 2 * Math.PI;
+  for (let i = 0; i < n; i++) {
+    let p = twoPiOverN * bestK * i - theta0;
+    p = ((p % TWO_PI) + TWO_PI) % TWO_PI;
+    phases[i] = p;
+  }
+  return phases;
+}
+
+function accumulatePhases(rE, rI, wE_E, wI_E, wE_I, wI_I, n) {
+  const phE = computePhases(rE, n);
+  const phI = computePhases(rI, n);
+  // kernel offset for (post i, pre j): (i - j + ⌊n/2⌋) mod n
+  const half = Math.floor(n / 2);
+  const TWO_PI = 2 * Math.PI;
+  const binsPerPi = NBINS / Math.PI;
+
+  // type → [post phases, pre phases, kernel vec]
+  const tps = [
+    ['EE', phE, phE, wE_E],
+    ['EI', phE, phI, wE_I],
+    ['IE', phI, phE, wI_E],
+    ['II', phI, phI, wI_I],
+  ];
+  const sumFrame = new Float64Array(NBINS);
+  const cntFrame = new Float64Array(NBINS);
+  for (const [tk, post, pre, w] of tps) {
+    if (!post || !pre) continue;     // skip if either population silent
+    const acc = phaseAcc[tk];
+
+    // If the kernel is identically zero (amp = 0), the average must be 0
+    // everywhere — short-circuit instead of letting EWMA decay slowly.
+    let kernelZero = true;
+    for (let k = 0; k < n; k++) {
+      if (w[k] !== 0) { kernelZero = false; break; }
+    }
+    if (kernelZero) { acc.val.fill(0); continue; }
+
+    sumFrame.fill(0); cntFrame.fill(0);
+    const bin = phaseBinarize;
+    for (let i = 0; i < n; i++) {
+      const pi = post[i];
+      for (let j = 0; j < n; j++) {
+        let d = pi - pre[j];
+        d = ((d % TWO_PI) + TWO_PI) % TWO_PI;
+        if (d > Math.PI) d = TWO_PI - d;
+        let b = Math.floor(d * binsPerPi);
+        if (b >= NBINS) b = NBINS - 1;
+        const off = ((i - j + half) % n + n) % n;
+        const wv = Math.abs(w[off]);
+        sumFrame[b] += bin ? (wv > BIN_WEIGHT_THRESH ? 1 : 0) : wv;
+        cntFrame[b] += 1;
+      }
+    }
+    for (let b = 0; b < NBINS; b++) {
+      if (cntFrame[b] > 0) {
+        // binarize → raw EWMA of per-frame count; otherwise → mean |w|
+        const frameVal = bin ? sumFrame[b] : (sumFrame[b] / cntFrame[b]);
+        acc.val[b] = Number.isFinite(acc.val[b])
+          ? (1 - EWMA_ALPHA) * acc.val[b] + EWMA_ALPHA * frameVal
+          : frameVal;
+      }
+    }
+  }
+}
+
+function updatePhaseCharts() {
+  // Shared y-range across all four phase plots
+  let yMax = 0;
+  for (const tk of ['EE','EI','IE','II']) {
+    const v = phaseAcc[tk].val;
+    for (let b = 0; b < NBINS; b++) {
+      if (Number.isFinite(v[b]) && v[b] > yMax) yMax = v[b];
+    }
+  }
+  const ySharedMax = yMax > 0 ? yMax * 1.1 : 1;
+
+  for (const tk of ['EE','EI','IE','II']) {
+    const ch = phaseCharts[tk];
+    const acc = phaseAcc[tk];
+    const pts = new Array(NBINS);
+    for (let b = 0; b < NBINS; b++) {
+      pts[b] = { x: _binCenters[b], y: acc.val[b] };
+    }
+    ch.data.datasets[0].data = pts;
+    ch.options.scales.y.min = 0;
+    ch.options.scales.y.max = ySharedMax;
+    ch.update('none');
+  }
+}
 
 let currentN = 0;
 
@@ -679,6 +913,7 @@ function updateCharts(d) {
       ch.options.scales.x.min = 1;
       ch.options.scales.x.max = d.n;
     }
+    resetPhaseAcc();
   }
   const betaE = new Array(d.n).fill(d.beta_E);
   const betaI = new Array(d.n).fill(d.beta_I);
@@ -686,7 +921,7 @@ function updateCharts(d) {
   const payloads = [
     [d.w_EE, d.w_IE, d.w_EI, d.w_II],
     [d.r_E, d.r_I],
-    [d.g_EE, d.g_IE, d.g_EI, d.g_II, betaE, betaI],
+    [d.g_EE, d.g_EI, d.g_IE, d.g_II, betaE, betaI],
   ];
   for (let ci = 0; ci < charts.length; ci++) {
     const ch = charts[ci];
@@ -695,6 +930,9 @@ function updateCharts(d) {
     }
     ch.update('none');
   }
+
+  accumulatePhases(d.r_E, d.r_I, d.w_EE, d.w_IE, d.w_EI, d.w_II, d.n);
+  updatePhaseCharts();
 }
 
 // ── Web worker ────────────────────────────────────────────────────────
@@ -739,6 +977,7 @@ document.getElementById('startstop').addEventListener('click', () => {
     simRunning = true;
     btn.textContent = 'Stop';
     btn.className = 'running';
+    resetPhaseAcc();
     worker.postMessage({ type: 'start', params: getParams() });
   } else {
     simRunning = false;
@@ -750,6 +989,12 @@ document.getElementById('startstop').addEventListener('click', () => {
 
 // ── Wire up all controls ──────────────────────────────────────────────
 document.getElementById('use_spiking').addEventListener('change', sendParams);
+
+document.getElementById('phase_binarize').addEventListener('change', e => {
+  phaseBinarize = e.target.checked;
+  resetPhaseAcc();
+  updatePhaseYLabels();
+});
 
 document.getElementById('n_exp').addEventListener('input', e => {
   document.getElementById('n_val').textContent = Math.pow(2, +e.target.value);
