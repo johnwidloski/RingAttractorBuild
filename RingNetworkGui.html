@@ -599,7 +599,8 @@ for (const r of WT_ROWS) {
 }
 
 // ── Chart helpers ─────────────────────────────────────────────────────
-const BLUE = '#4c9be8', RED = '#e06c75';
+// "BLUE"/"RED" names retained for backwards compat; values swapped to flip E/I colours.
+const BLUE = '#e06c75', RED = '#4c9be8';
 
 function ds(label, color, dash) {
   return {
