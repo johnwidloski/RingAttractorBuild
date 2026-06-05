@@ -19,7 +19,8 @@ body {
 /* ── Left panel ─────────────────────────────────────────────── */
 #controls {
   width: 555px;
-  min-width: 510px;
+  min-width: 220px;
+  flex-shrink: 0;
   background: #161b22;
   border-right: 1px solid #30363d;
   padding: 12px 12px;
@@ -28,6 +29,16 @@ body {
   flex-direction: column;
   gap: 12px;
 }
+
+/* ── Resizer (drag handle between panel and plots) ───────────── */
+#resizer {
+  flex: 0 0 6px;
+  cursor: col-resize;
+  background: #30363d;
+  transition: background 0.15s;
+}
+#resizer:hover, #resizer.dragging { background: #58a6ff; }
+body.resizing { cursor: col-resize; user-select: none; }
 
 /* ── Right panel ─────────────────────────────────────────────── */
 #plots {
@@ -39,28 +50,47 @@ body {
   overflow: hidden;
   background: #0d1117;
 }
-#plots-left, #plots-right {
+#plots-left {
   display: flex;
   flex-direction: column;
   gap: 4px;
   min-height: 0;
   overflow: hidden;
+  flex: 1;
+  min-width: 0;
 }
-#plots-left  { flex: 1; min-width: 0; }
-#plots-right { width: 280px; flex-shrink: 0; }
-#phase-controls {
-  flex-shrink: 0;
+/* Right column: the square mean-weight plot, aligned to the top so it sits
+   beside the Weights plot; the space below it is left empty. This keeps the
+   Weights / Firing-rates / Inputs plots in one full-width stack so their
+   x-axes line up. */
+#phase-col {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  background: #161b22;
-  border: 1px solid #30363d;
-  border-radius: 4px;
-  font-size: 12px;
-  color: #8b949e;
+  flex-direction: column;
+  align-items: flex-start;
+  min-height: 0;
+  flex: 0 0 auto;
 }
+/* height + width set by sizePhaseSquare(): square, matching the Weights plot */
+#phase-wrap { flex: 0 0 auto; }
 .plot-wrap { flex: 1; position: relative; min-height: 0; }
+
+/* ── 2D heatmaps ─────────────────────────────────────────────── */
+#rate-2d { gap: 12px; align-items: center; justify-content: center; }
+#inputs-2d { display: flex; flex-direction: column; gap: 4px; height: 100%; width: 100%; }
+.hm-row { display: flex; flex-direction: row; gap: 6px; min-height: 0; height: 100%; align-items: center; justify-content: center; }
+#inputs-2d .hm-row { flex: 1; }
+.hm { position: relative; height: 100%; aspect-ratio: 1 / 1; }
+.hm canvas {
+  width: 100%; height: 100%; display: block;
+  background: #0d1117; image-rendering: pixelated;
+  border: 1px solid #21262d;
+}
+.hm-lbl {
+  position: absolute; top: 2px; left: 4px;
+  font-size: 11px; color: #e6edf3; pointer-events: none;
+  text-shadow: 0 0 3px #000, 0 0 3px #000;
+}
+.hm-empty { visibility: hidden; }
 
 /* ── Start / Stop button ─────────────────────────────────────── */
 #startstop {
@@ -190,6 +220,13 @@ input:checked ~ .tog-track::before {
 .wt td input[type=range] { width: 100%; min-width: 50px; }
 .wt .sval { min-width: 36px; font-size: 12px; }
 
+/* Match the weight-table value readouts (size + spacing) for the
+   standalone sliders: Neurons, β_E, β_I, w_a, τ_a */
+#n_val, #beta_E_val, #beta_I_val, #amp_a_val, #tau_a_val {
+  min-width: 36px;
+  font-size: 12px;
+}
+
 /* ── Presets ─────────────────────────────────────────────────── */
 input[type=text]#preset_name {
   flex: 1;
@@ -254,20 +291,21 @@ input[type=text]#preset_name:focus { border-color: #58a6ff; }
 
   <button id="startstop" class="stopped">Start</button>
 
-  <!-- Spiking -->
+  <!-- Spiking + Neurons -->
   <div class="ctrl-row">
-    <span class="lbl">Spiking</span>
+    <span class="lbl" style="min-width:auto">Spiking</span>
     <label class="tog">
       <input type="checkbox" id="use_spiking" checked>
       <span class="tog-track"></span>
     </label>
-  </div>
-
-  <!-- Neurons -->
-  <div class="ctrl-row">
-    <span class="lbl">Neurons</span>
-    <input type="range" id="n_exp" min="3" max="10" step="1" value="7">
+    <span class="lbl" style="min-width:auto; margin-left:12px">Neurons</span>
+    <input type="range" id="n_exp" min="3" max="10" step="1" value="7" style="min-width:50px">
     <span class="sval" id="n_val">128</span>
+    <span class="lbl" id="dim_label" style="min-width:auto; margin-left:12px">1D</span>
+    <label class="tog">
+      <input type="checkbox" id="use_2d">
+      <span class="tog-track"></span>
+    </label>
   </div>
 
   <!-- Weights -->
@@ -296,14 +334,38 @@ input[type=text]#preset_name:focus { border-color: #58a6ff; }
   <div>
     <div class="sec-title">Uniform Input</div>
     <div class="ctrl-row">
-      <span class="lbl">β_E</span>
-      <input type="range" id="beta_E" min="0" max="1000" step="1" value="400">
+      <span class="lbl" style="min-width:auto">β_E</span>
+      <input type="range" id="beta_E" min="0" max="1000" step="1" value="400" style="min-width:50px">
       <span class="sval" id="beta_E_val">400</span>
+      <span class="lbl" style="min-width:auto; margin-left:12px">β_I</span>
+      <input type="range" id="beta_I" min="0" max="1000" step="1" value="0" style="min-width:50px">
+      <span class="sval" id="beta_I_val">0</span>
+    </div>
+  </div>
+
+  <!-- Adaptation -->
+  <div>
+    <div class="sec-title">Adaptation</div>
+    <div class="ctrl-row">
+      <label class="tog">
+        <input type="checkbox" id="use_adapt">
+        <span class="tog-track"></span>
+      </label>
+      <span class="lbl" style="min-width:auto; margin-left:8px">w_a</span>
+      <input type="range" id="amp_a" min="0" max="10" step="0.1" value="1" style="min-width:50px">
+      <span class="sval" id="amp_a_val" style="min-width:auto">1</span>
+      <span class="lbl" style="min-width:auto; margin-left:12px">τ_a</span>
+      <input type="range" id="tau_a" min="0" max="1" step="0.001" value="0.739" style="min-width:50px">
+      <span class="sval" id="tau_a_val" style="min-width:auto">3.0</span>
     </div>
     <div class="ctrl-row">
-      <span class="lbl">β_I</span>
-      <input type="range" id="beta_I" min="0" max="1000" step="1" value="0">
-      <span class="sval" id="beta_I_val">0</span>
+      <label class="tog">
+        <input type="checkbox" id="use_reset">
+        <span class="tog-track"></span>
+      </label>
+      <span class="lbl" style="min-width:auto; margin-left:8px">T_reset</span>
+      <input type="range" id="t_reset" min="1" max="10" step="0.1" value="5" style="min-width:50px">
+      <span class="sval" id="t_reset_val" style="min-width:auto">5.0</span>
     </div>
   </div>
 
@@ -319,25 +381,37 @@ input[type=text]#preset_name:focus { border-color: #58a6ff; }
 
 </div>
 
+<!-- ══ Drag handle ══════════════════════════════════════════════ -->
+<div id="resizer"></div>
+
 <!-- ══ Plots ════════════════════════════════════════════════════ -->
 <div id="plots">
   <div id="plots-left">
-    <div class="plot-wrap"><canvas id="c1"></canvas></div>
-    <div class="plot-wrap"><canvas id="c2"></canvas></div>
-    <div class="plot-wrap"><canvas id="c4"></canvas></div>
-  </div>
-  <div id="plots-right">
-    <div id="phase-controls">
-      <label class="tog">
-        <input type="checkbox" id="phase_binarize">
-        <span class="tog-track"></span>
-      </label>
-      <span>Binarize (count w &gt; 1e-3)</span>
+    <div class="plot-wrap" id="weights-wrap"><canvas id="c1"></canvas></div>
+    <div class="plot-wrap" id="rate-wrap">
+      <canvas id="c2"></canvas>
+      <div id="rate-2d" class="hm-row" style="display:none">
+        <div class="hm"><canvas id="hm_E"></canvas><span class="hm-lbl">E</span></div>
+        <div class="hm"><canvas id="hm_I"></canvas><span class="hm-lbl">I</span></div>
+      </div>
     </div>
-    <div class="plot-wrap"><canvas id="c_EE"></canvas></div>
-    <div class="plot-wrap"><canvas id="c_EI"></canvas></div>
-    <div class="plot-wrap"><canvas id="c_IE"></canvas></div>
-    <div class="plot-wrap"><canvas id="c_II"></canvas></div>
+    <div class="plot-wrap" id="inputs-wrap">
+      <canvas id="c4"></canvas>
+      <div id="inputs-2d" style="display:none">
+        <div class="hm-row">
+          <div class="hm"><canvas id="hm_g_EE"></canvas><span class="hm-lbl">g_EE</span></div>
+          <div class="hm"><canvas id="hm_g_EI"></canvas><span class="hm-lbl">g_EI</span></div>
+          <div class="hm"><canvas id="hm_g_IE"></canvas><span class="hm-lbl">g_IE</span></div>
+          <div class="hm"><canvas id="hm_g_II"></canvas><span class="hm-lbl">g_II</span></div>
+        </div>
+        <div class="hm-row">
+          <div class="hm"><canvas id="hm_g_a"></canvas><span class="hm-lbl">|g_a|</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="phase-col">
+    <div class="plot-wrap" id="phase-wrap"><canvas id="c_phase"></canvas></div>
   </div>
 </div>
 
@@ -392,20 +466,62 @@ function fftshift(arr) {
   return r;
 }
 
+// ── 2D FFT (row–column, power-of-2 side L) ───────────────────────────
+let ftBufRe = null, ftBufIm = null;   // reusable length-L scratch (2D mode)
+function fft2(re, im, L) {
+  for (let y = 0; y < L; y++) {
+    const off = y * L;
+    for (let x = 0; x < L; x++) { ftBufRe[x] = re[off + x]; ftBufIm[x] = im[off + x]; }
+    fft(ftBufRe, ftBufIm);
+    for (let x = 0; x < L; x++) { re[off + x] = ftBufRe[x]; im[off + x] = ftBufIm[x]; }
+  }
+  for (let x = 0; x < L; x++) {
+    for (let y = 0; y < L; y++) { ftBufRe[y] = re[y * L + x]; ftBufIm[y] = im[y * L + x]; }
+    fft(ftBufRe, ftBufIm);
+    for (let y = 0; y < L; y++) { re[y * L + x] = ftBufRe[y]; im[y * L + x] = ftBufIm[y]; }
+  }
+}
+function ifft2(re, im, L) {
+  const M = L * L;
+  for (let k = 0; k < M; k++) im[k] = -im[k];
+  fft2(re, im, L);
+  for (let k = 0; k < M; k++) { re[k] /= M; im[k] = -im[k] / M; }
+}
+function fftshift2(arr, L) {
+  const s = Math.floor(L / 2);
+  const r = new Float64Array(L * L);
+  for (let y = 0; y < L; y++) {
+    const yy = (y + s) % L;
+    for (let x = 0; x < L; x++) r[y * L + x] = arr[yy * L + ((x + s) % L)];
+  }
+  return r;
+}
+
 // ── Simulation state ──────────────────────────────────────────────────
 let N = 0, params = null;
+let D = 1, L = 0;   // dimensionality (1 or 2) and side length (2D torus is L×L = N)
 let r_E = null, r_I = null;
 let wFT = {};       // { EE, IE, EI, II } each { re, im, vec }
 let wkRe, wkIm;    // reusable FFT work buffers
 // pre-alloc output buffers
 let g_EE, g_IE, g_EI, g_II, G_E, G_I;
+let a_E, g_adapt;   // E-cell adaptation variable and its current (-w_a·a)
+let pulseBlob;      // precomputed Gaussian drive at center for periodic resets
+let resetElapsed = 0, silenceRemaining = 0, pulseRemaining = 0;   // reset timer / silence / pulse countdowns (s)
 
 let running = false;
 let pendingParams = null, paramsDirty = false;
 
 const dt = 0.5 / 1000;
 const tau_s = 30 / 1000;
-const STEPS_PER_TICK = 200;   // simulation steps between UI posts
+const STEPS_PER_TICK = 200;   // simulation steps between UI posts (1D)
+const STEPS_2D = 20;          // fewer steps/tick in 2D (2D FFTs are heavier)
+
+// Periodic reset pulse: brief strong Gaussian drive at the ring centre.
+const SILENCE_DUR = 0.5;      // s — activity silenced just before each reset pulse
+const PULSE_DUR = 0.100;      // s — how long the pulse is held (100 ms)
+const PULSE_AMP = 5000;       // peak excitatory drive added to G_E at centre
+const PULSE_SIG_FRAC = 1/16;  // Gaussian width as a fraction of N
 
 // ── Weight helpers ────────────────────────────────────────────────────
 function makeWeightVec(n, sig, amp, inv, bin) {
@@ -435,13 +551,55 @@ function computeWeightFT(w) {
   return { re, im };
 }
 
-function initWeights(p, n) {
-  const env = makeWeightVec(n, p.sig_env, 1.0, false, false);
-  for (const nm of ['EE','EI','IE','II']) {
-    const vec = makeWeightVec(n, p['sig_'+nm], p['amp_'+nm], p['inv_'+nm], p['bin_'+nm]);
-    for (let i = 0; i < n; i++) vec[i] *= env[i];
-    const ft  = computeWeightFT(vec);
-    wFT[nm] = { re: ft.re, im: ft.im, vec };
+// 2D isotropic Gaussian kernel (peak 1 at the centre pixel), same options
+// as makeWeightVec; returned row-major, length L*L.
+function makeWeightVec2D(L, sig, amp, inv, bin) {
+  const w = new Float64Array(L * L);
+  const ctr = (Math.floor(L / 2) + 1) / L;
+  let mx = 0;
+  for (let y = 0; y < L; y++) {
+    const py = (y + 1) / L - ctr;
+    for (let x = 0; x < L; x++) {
+      const px = (x + 1) / L - ctr;
+      const v = Math.exp(-0.5 * (px * px + py * py) / (sig * sig));
+      w[y * L + x] = v;
+      if (v > mx) mx = v;
+    }
+  }
+  for (let k = 0; k < w.length; k++) {
+    w[k] /= mx;
+    if (inv) w[k] = 1 - w[k];
+    if (bin) w[k] = w[k] >= 0.5 ? 1 : 0;
+    w[k] *= amp;
+  }
+  return w;
+}
+
+function computeWeightFT2(w, L) {
+  const ws = fftshift2(w, L);
+  const re = new Float64Array(ws);
+  const im = new Float64Array(L * L);
+  fft2(re, im, L);
+  return { re, im };
+}
+
+function initWeights(p) {
+  if (D === 2) {
+    const env = makeWeightVec2D(L, p.sig_env, 1.0, false, false);
+    for (const nm of ['EE','EI','IE','II']) {
+      const vec = makeWeightVec2D(L, p['sig_'+nm], p['amp_'+nm], p['inv_'+nm], p['bin_'+nm]);
+      for (let k = 0; k < vec.length; k++) vec[k] *= env[k];
+      const ft = computeWeightFT2(vec, L);
+      wFT[nm] = { re: ft.re, im: ft.im, vec };
+    }
+  } else {
+    const env = makeWeightVec(N, p.sig_env, 1.0, false, false);
+    for (const nm of ['EE','EI','IE','II']) {
+      const vec = makeWeightVec(N, p['sig_'+nm], p['amp_'+nm], p['inv_'+nm], p['bin_'+nm]);
+      for (let i = 0; i < N; i++) vec[i] *= env[i];
+      const ft  = computeWeightFT(vec);
+      wFT[nm] = { re: ft.re, im: ft.im, vec };
+    }
   }
 }
 
@@ -451,14 +609,40 @@ function allocBuffers(n) {
   g_EI = new Float64Array(n); g_II = new Float64Array(n);
   G_E  = new Float64Array(n); G_I  = new Float64Array(n);
   r_E  = new Float64Array(n); r_I  = new Float64Array(n);
-  r_E[Math.max(0, Math.floor(n / 2) - 1)] = 1; // seed bump
+  a_E  = new Float64Array(n); g_adapt = new Float64Array(n);
+  pulseBlob = new Float64Array(n);
+
+  if (D === 2) {
+    const c = Math.floor(L / 2);
+    const sig = Math.max(1, L * PULSE_SIG_FRAC);
+    for (let y = 0; y < L; y++) {
+      const dy = y - c;
+      for (let x = 0; x < L; x++) {
+        const dx = x - c;
+        pulseBlob[y * L + x] = PULSE_AMP * Math.exp(-0.5 * (dx * dx + dy * dy) / (sig * sig));
+      }
+    }
+    r_E[c * L + c] = 1; // seed bump at centre pixel
+  } else {
+    const c = Math.floor(n / 2);
+    const sig = Math.max(1, n * PULSE_SIG_FRAC);
+    for (let i = 0; i < n; i++) {
+      const dd = i - c;
+      pulseBlob[i] = PULSE_AMP * Math.exp(-0.5 * (dd / sig) * (dd / sig));
+    }
+    r_E[Math.max(0, c - 1)] = 1; // seed bump
+  }
+  resetElapsed = 0; silenceRemaining = SILENCE_DUR; pulseRemaining = PULSE_DUR;  // each run: silence → centre pulse
 }
 
 function applyParams(p) {
-  const newN = p.n;
-  const resize = newN !== N;
-  N = newN;
-  initWeights(p, N);
+  const dims = p.dims || 1;
+  const side = (dims === 2) ? Math.min(p.n, 128) : p.n;
+  const newN = (dims === 2) ? side * side : side;
+  const resize = newN !== N || dims !== D;
+  D = dims; L = side; N = newN;
+  if (D === 2) { ftBufRe = new Float64Array(L); ftBufIm = new Float64Array(L); }
+  initWeights(p);
   if (resize || r_E === null) allocBuffers(N);
   params = p;
 }
@@ -474,6 +658,17 @@ function circConvInto(sig, kRe, kIm, out) {
     out[i] = a*c - b*d; wkIm[i] = a*d + b*c;
   }
   ifft(out, wkIm);
+}
+
+function circConvInto2D(sig, kRe, kIm, out) {
+  out.set(sig);
+  wkIm.fill(0);
+  fft2(out, wkIm, L);
+  for (let i = 0; i < N; i++) {
+    const a = out[i], b = wkIm[i], c = kRe[i], d = kIm[i];
+    out[i] = a*c - b*d; wkIm[i] = a*d + b*c;
+  }
+  ifft2(out, wkIm, L);
 }
 
 // ── Poisson sampler ───────────────────────────────────────────────────
@@ -501,16 +696,44 @@ function tick() {
   if (!r_E) { setTimeout(tick, 10); return; }
 
   const sp = params.spiking;
+  const adaptOn = params.adapt, wa = params.w_a, tauA = params.tau_a;
+  const resetOn = params.reset, tReset = params.t_reset;
+  const conv = (D === 2) ? circConvInto2D : circConvInto;
+  const steps = (D === 2) ? STEPS_2D : STEPS_PER_TICK;
 
-  for (let s = 0; s < STEPS_PER_TICK; s++) {
-    circConvInto(r_E, wFT.EE.re, wFT.EE.im, g_EE);
-    circConvInto(r_E, wFT.IE.re, wFT.IE.im, g_IE);
-    circConvInto(r_I, wFT.EI.re, wFT.EI.im, g_EI);
-    circConvInto(r_I, wFT.II.re, wFT.II.im, g_II);
+  for (let s = 0; s < steps; s++) {
+    // Periodic reset: every T_reset, silence briefly, then fire a centre pulse.
+    if (resetOn) {
+      resetElapsed += dt;
+      if (resetElapsed >= tReset) {
+        silenceRemaining = SILENCE_DUR; pulseRemaining = PULSE_DUR; resetElapsed = 0;
+      }
+    }
+
+    // Silence phase: zero all activity (adaptation keeps evolving — only decays,
+    // it is not reset). Runs before the pulse on every reset and at start-of-run.
+    if (silenceRemaining > 0) {
+      silenceRemaining -= dt;
+      for (let i = 0; i < N; i++) {
+        r_E[i] = 0; r_I[i] = 0;
+        g_EE[i] = 0; g_IE[i] = 0; g_EI[i] = 0; g_II[i] = 0;
+        G_E[i] = 0;  G_I[i] = 0;
+        if (adaptOn) a_E[i] -= a_E[i] * dt / tauA;
+      }
+      continue;
+    }
+
+    // an active pulse always fires (start-of-run or periodic reset), after silence
+    const pulsing = pulseRemaining > 0;
+
+    conv(r_E, wFT.EE.re, wFT.EE.im, g_EE);
+    conv(r_E, wFT.IE.re, wFT.IE.im, g_IE);
+    conv(r_I, wFT.EI.re, wFT.EI.im, g_EI);
+    conv(r_I, wFT.II.re, wFT.II.im, g_II);
 
     const bE = params.beta_E, bI = params.beta_I;
     for (let i = 0; i < N; i++) {
-      G_E[i] = g_EE[i] + g_EI[i] + bE;
+      G_E[i] = g_EE[i] + g_EI[i] + bE - (adaptOn ? wa * a_E[i] : 0) + (pulsing ? pulseBlob[i] : 0);
       G_I[i] = g_IE[i] + g_II[i] + bI;
     }
     for (let i = 0; i < N; i++) {
@@ -520,8 +743,12 @@ function tick() {
       const sI = sp ? poissonSample(fI * dt) : fI * dt;
       r_E[i] += sE - r_E[i] * dt / tau_s;
       r_I[i] += sI - r_I[i] * dt / tau_s;
+      if (adaptOn) a_E[i] += sE - a_E[i] * dt / tauA;
     }
+    if (pulsing) pulseRemaining -= dt;
   }
+  // adaptation current for plotting (only displayed when enabled)
+  for (let i = 0; i < N; i++) g_adapt[i] = -wa * a_E[i];
 
   // Divergence guard: reset if NaN/Inf
   let ok = true;
@@ -530,14 +757,17 @@ function tick() {
   }
   if (!ok) allocBuffers(N);
 
+  // 1D → plain arrays (consumed by Chart.js); 2D → Float32Array (heatmaps).
+  const pack = (D === 2) ? (a => new Float32Array(a)) : (a => Array.from(a));
   self.postMessage({
-    type: 'update', n: N,
-    r_E:  Array.from(r_E),  r_I:  Array.from(r_I),
-    g_EE: Array.from(g_EE), g_IE: Array.from(g_IE),
-    g_EI: Array.from(g_EI), g_II: Array.from(g_II),
-    G_E:  Array.from(G_E),  G_I:  Array.from(G_I),
-    w_EE: Array.from(wFT.EE.vec), w_IE: Array.from(wFT.IE.vec),
-    w_EI: Array.from(wFT.EI.vec), w_II: Array.from(wFT.II.vec),
+    type: 'update', n: N, dims: D, L: L,
+    r_E:  pack(r_E),  r_I:  pack(r_I),
+    g_EE: pack(g_EE), g_IE: pack(g_IE),
+    g_EI: pack(g_EI), g_II: pack(g_II),
+    G_E:  pack(G_E),  G_I:  pack(G_I),
+    w_EE: pack(wFT.EE.vec), w_IE: pack(wFT.IE.vec),
+    w_EI: pack(wFT.EI.vec), w_II: pack(wFT.II.vec),
+    g_adapt: pack(g_adapt), adapt: params.adapt,
     beta_E: params.beta_E, beta_I: params.beta_I
   });
 
@@ -563,10 +793,44 @@ self.onmessage = function(e) {
 
 <!-- ══ Main thread ══════════════════════════════════════════════════ -->
 <script>
+// ── Resizable control panel ──────────────────────────────────────────
+(function () {
+  const panel = document.getElementById('controls');
+  const resizer = document.getElementById('resizer');
+  const MIN_W = 220, MIN_PLOTS = 320;
+  let dragging = false;
+
+  resizer.addEventListener('mousedown', e => {
+    dragging = true;
+    resizer.classList.add('dragging');
+    document.body.classList.add('resizing');
+    e.preventDefault();
+  });
+
+  window.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const maxW = window.innerWidth - resizer.offsetWidth - MIN_PLOTS;
+    const w = Math.max(MIN_W, Math.min(e.clientX, maxW));
+    panel.style.width = w + 'px';
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    resizer.classList.remove('dragging');
+    document.body.classList.remove('resizing');
+  });
+})();
+
 // ── Sigma log-scale helpers (0.01 – 10, 3 decades) ───────────────────
 const sigToSlider = s => Math.log10(s / 0.001) / 4;
 const sliderToSig = v => 0.001 * Math.pow(10, v * 4);
 const fmtSig = s => s < 0.1 ? s.toFixed(3) : s < 1 ? s.toFixed(2) : s.toFixed(1);
+
+// ── Adaptation time-constant log-scale helpers (0.1 – 10 s, 2 decades) ──
+const tauToSlider = t => Math.log10(t / 0.1) / 2;
+const sliderToTau = v => 0.1 * Math.pow(10, v * 2);
+const fmtTau = t => t < 1 ? t.toFixed(2) : t.toFixed(1);
 
 // ── Weight row config ─────────────────────────────────────────────────
 const WT_ROWS = [
@@ -611,27 +875,46 @@ function ds(label, color, dash) {
   };
 }
 
-// Custom plugin: draws a line-style legend to the right of the plot area,
-// respecting each dataset's borderDash pattern.
+// Custom plugin: draws a boxed line-style legend in the upper-right corner
+// inside the plot area, respecting each dataset's borderDash pattern.
 const lineLegendPlugin = {
   id: 'lineLegend',
   afterDraw(chart) {
     const { ctx, chartArea, data } = chart;
     if (!chartArea) return;
-    const dsets = data.datasets;
+    // Only legend datasets that currently have data (e.g. g_a appears only
+    // while adaptation is enabled).
+    const dsets = data.datasets.filter(d => d.data && d.data.length > 0);
+    if (!dsets.length) return;
     const lineLen = 22, gap = 5, rowH = 15;
-    const totalH = dsets.length * rowH;
-    const x0 = chartArea.right + 10;
-    let y = (chartArea.top + chartArea.bottom) / 2 - totalH / 2 + rowH / 2;
+    const padX = 8, padY = 6, margin = 8;
 
     ctx.save();
     ctx.font = '13px "Segoe UI", system-ui, sans-serif';
     ctx.textBaseline = 'middle';
 
+    // Size the box to the widest label
+    let maxText = 0;
+    for (const d of dsets) maxText = Math.max(maxText, ctx.measureText(d.label).width);
+    const boxW = padX * 2 + lineLen + gap + maxText;
+    const boxH = padY * 2 + dsets.length * rowH;
+    const boxX = chartArea.right - margin - boxW;
+    const boxY = chartArea.top + margin;
+
+    // Box background + border
+    ctx.fillStyle = 'rgba(13, 17, 23, 0.85)';
+    ctx.strokeStyle = '#30363d';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.rect(boxX, boxY, boxW, boxH);
+    ctx.fill();
+    ctx.stroke();
+
+    let y = boxY + padY + rowH / 2;
+    const xLine = boxX + padX;
     for (let i = 0; i < dsets.length; i++) {
       const d = dsets[i];
-      const alpha = chart.isDatasetVisible(i) ? 1 : 0.35;
-      ctx.globalAlpha = alpha;
+      ctx.globalAlpha = chart.isDatasetVisible(i) ? 1 : 0.35;
 
       // Draw line segment
       ctx.strokeStyle = d.borderColor;
@@ -639,20 +922,26 @@ const lineLegendPlugin = {
       ctx.lineCap = 'round';
       ctx.setLineDash(d.borderDash || []);
       ctx.beginPath();
-      ctx.moveTo(x0, y);
-      ctx.lineTo(x0 + lineLen, y);
+      ctx.moveTo(xLine, y);
+      ctx.lineTo(xLine + lineLen, y);
       ctx.stroke();
 
       // Draw label
       ctx.setLineDash([]);
       ctx.fillStyle = '#8b949e';
-      ctx.fillText(d.label, x0 + lineLen + gap, y);
+      ctx.fillText(d.label, xLine + lineLen + gap, y);
 
       y += rowH;
     }
     ctx.restore();
   }
 };
+
+// Shared, grow-only y-axis width for the three stacked plots (Weights,
+// Firing rates, Inputs). Each one reports its natural width via afterFit; we
+// keep the max and apply it to all, so their left edges align regardless of
+// how wide each plot's tick labels are.
+let stackYW = 0;
 
 function mkChart(id, title, datasets, xlabel) {
   return new Chart(document.getElementById(id).getContext('2d'), {
@@ -661,7 +950,7 @@ function mkChart(id, title, datasets, xlabel) {
     options: {
       animation: false,
       responsive: true, maintainAspectRatio: false,
-      layout: { padding: { right: 72 } },
+      layout: { padding: { right: 12 } },
       plugins: {
         title: { display: false },
         legend: { display: false },
@@ -674,6 +963,9 @@ function mkChart(id, title, datasets, xlabel) {
           grid: { color: '#21262d' }
         },
         y: {
+          // Align the three stacked plots' left edges: each reports its natural
+          // width, we keep the max and apply it to all (see stackYW).
+          afterFit: s => { if (s.width > stackYW) stackYW = s.width; s.width = stackYW; },
           title: { display: true, text: title, color: '#8b949e', font: { size: 13 } },
           ticks: { color: '#6e7681', font: { size: 12 } },
           grid: { color: '#21262d' }
@@ -702,6 +994,7 @@ const charts = [
     ds('g_II', RED,  []),
     ds('β_E',  BLUE, [8,4]),
     ds('β_I',  RED,  [8,4]),
+    ds('g_a',  BLUE, [2,2,8,2]),   // adaptation current (dash-dot); shown only when enabled
   ], 'Neuron'),
 ];
 
@@ -714,69 +1007,51 @@ const PHASE_STYLES = {
   EI: { color: RED,  dash: [3, 4] },
   II: { color: RED,  dash: []     },
 };
-let phaseBinarize = false; // false: mean |w| ; true: count of pairs with |w| > 1
-const BIN_WEIGHT_THRESH = 1e-3;
-function phaseYLabel(tk) {
-  return phaseBinarize ? `# conn ${tk}` : `⟨w_${tk}⟩`;
-}
 
-function mkPhaseChart(id, label, color, dash) {
-  return new Chart(document.getElementById(id).getContext('2d'), {
-    type: 'line',
-    data: { labels: [], datasets: [{
-      label, data: [],
-      borderColor: color, backgroundColor: 'transparent',
-      borderWidth: 1.5, borderDash: dash,
-      pointRadius: 0, tension: 0, spanGaps: false,
-    }] },
-    options: {
-      animation: false,
-      responsive: true, maintainAspectRatio: false,
-      layout: { padding: { right: 8, top: 4 } },
-      plugins: { title: { display: false }, legend: { display: false } },
-      scales: {
-        x: {
-          type: 'linear', min: 0, max: 1,
-          title: { display: true, text: 'phase similarity', color: '#8b949e', font: { size: 11 } },
-          ticks: { color: '#6e7681', maxTicksLimit: 4, font: { size: 10 },
-                   callback: v => v.toFixed(2) },
-          grid: { color: '#21262d' }
-        },
-        y: {
-          title: { display: true, text: phaseYLabel(label), color: '#8b949e', font: { size: 11 } },
-          ticks: { color: '#6e7681', font: { size: 10 },
-                   callback: v => {
-                     const a = Math.abs(v);
-                     if (a < 1e-6) return '0';
-                     if (a < 0.01 || a >= 1000) return v.toExponential(1);
-                     return v.toFixed(2);
-                   } },
-          grid: { color: '#21262d' }
-        }
+// Combined mean-weight-vs-phase plot: all four curves overlaid with the same
+// styling as the Weights plot (dataset order matches it). No legend — it is
+// identical to the Weights plot's legend.
+const PHASE_ORDER = ['EE','IE','EI','II'];
+const phaseChart = new Chart(document.getElementById('c_phase').getContext('2d'), {
+  type: 'line',
+  data: { datasets: PHASE_ORDER.map(tk => ({
+    label: tk, data: [],
+    borderColor: PHASE_STYLES[tk].color, backgroundColor: 'transparent',
+    borderWidth: 1.5, borderDash: PHASE_STYLES[tk].dash,
+    pointRadius: 0, tension: 0, spanGaps: false,
+  })) },
+  options: {
+    animation: false,
+    responsive: true, maintainAspectRatio: false,
+    layout: { padding: { right: 8, top: 4 } },
+    plugins: { title: { display: false }, legend: { display: false } },
+    scales: {
+      x: {
+        type: 'linear', min: 0, max: 1,
+        title: { display: true, text: 'phase similarity', color: '#8b949e', font: { size: 12 } },
+        ticks: { color: '#6e7681', maxTicksLimit: 5, font: { size: 12 },
+                 callback: v => v.toFixed(2) },
+        grid: { color: '#21262d' }
+      },
+      y: {
+        title: { display: true, text: '⟨w⟩', color: '#8b949e', font: { size: 12 } },
+        ticks: { color: '#6e7681', font: { size: 12 }, count: 5,
+                 callback: v => {
+                   const a = Math.abs(v);
+                   if (a < 1e-6) return '0';
+                   if (a < 0.01 || a >= 1000) return v.toExponential(1);
+                   return v.toFixed(2);
+                 } },
+        grid: { color: '#21262d' }
       }
     }
-  });
-}
-
-const phaseCharts = {
-  EE: mkPhaseChart('c_EE', 'EE', PHASE_STYLES.EE.color, PHASE_STYLES.EE.dash),
-  EI: mkPhaseChart('c_EI', 'EI', PHASE_STYLES.EI.color, PHASE_STYLES.EI.dash),
-  IE: mkPhaseChart('c_IE', 'IE', PHASE_STYLES.IE.color, PHASE_STYLES.IE.dash),
-  II: mkPhaseChart('c_II', 'II', PHASE_STYLES.II.color, PHASE_STYLES.II.dash),
-};
+  }
+});
 
 let phaseAcc = null;       // { EE: { val: Float64Array(NBINS) }, ... }  EWMA of per-bin metric
 // bin b has |Δφ| center = (b + 0.5)·π/NBINS;  similarity = (π − |Δφ|)/π = 1 − (b + 0.5)/NBINS
 const _binCenters = Array.from({length: NBINS}, (_, i) => 1 - (i + 0.5) / NBINS);
 const EWMA_ALPHA = 0.1;    // 0..1; larger = more reactive, less smooth
-
-function updatePhaseYLabels() {
-  for (const tk of ['EE','EI','IE','II']) {
-    const ch = phaseCharts[tk];
-    ch.options.scales.y.title.text = phaseYLabel(tk);
-    ch.update('none');
-  }
-}
 
 function resetPhaseAcc() {
   phaseAcc = {};
@@ -785,11 +1060,10 @@ function resetPhaseAcc() {
     val.fill(NaN);
     phaseAcc[k] = { val };
   }
-  for (const k of ['EE','EI','IE','II']) {
-    const ch = phaseCharts[k];
-    ch.data.datasets[0].data = _binCenters.map(x => ({ x, y: NaN }));
-    ch.update('none');
-  }
+  PHASE_ORDER.forEach((tk, i) => {
+    phaseChart.data.datasets[i].data = _binCenters.map(x => ({ x, y: NaN }));
+  });
+  phaseChart.update('none');
 }
 resetPhaseAcc();
 
@@ -851,7 +1125,6 @@ function accumulatePhases(rE, rI, wE_E, wI_E, wE_I, wI_I, n) {
     if (kernelZero) { acc.val.fill(0); continue; }
 
     sumFrame.fill(0); cntFrame.fill(0);
-    const bin = phaseBinarize;
     for (let i = 0; i < n; i++) {
       const pi = post[i];
       for (let j = 0; j < n; j++) {
@@ -861,17 +1134,82 @@ function accumulatePhases(rE, rI, wE_E, wI_E, wE_I, wI_I, n) {
         let b = Math.floor(d * binsPerPi);
         if (b >= NBINS) b = NBINS - 1;
         const off = ((i - j + half) % n + n) % n;
-        const wv = Math.abs(w[off]);
-        sumFrame[b] += bin ? (wv > BIN_WEIGHT_THRESH ? 1 : 0) : wv;
+        sumFrame[b] += Math.abs(w[off]);
         cntFrame[b] += 1;
       }
     }
     for (let b = 0; b < NBINS; b++) {
       if (cntFrame[b] > 0) {
-        // binarize → raw EWMA of per-frame count; otherwise → mean |w|
-        const frameVal = bin ? sumFrame[b] : (sumFrame[b] / cntFrame[b]);
+        const frameVal = sumFrame[b] / cntFrame[b];   // mean |w| in this bin
         acc.val[b] = Number.isFinite(acc.val[b])
           ? (1 - EWMA_ALPHA) * acc.val[b] + EWMA_ALPHA * frameVal
+          : frameVal;
+      }
+    }
+  }
+}
+
+// ── True 2D phase (torus) ──────────────────────────────────────────────
+// Per-neuron 2D phase (φx, φy) from the dominant x/y activity modes, found on
+// the marginal profiles. Phase similarity uses the 2D toroidal phase distance.
+const PHASE_SAMPLE = 256;   // sampled grid points → S² pairs per frame
+
+function computePhases2D(r, L) {
+  const px = new Float64Array(L), py = new Float64Array(L);
+  for (let y = 0; y < L; y++) {
+    const off = y * L;
+    for (let x = 0; x < L; x++) { const v = r[off + x]; px[x] += v; py[y] += v; }
+  }
+  return { x: computePhases(px, L), y: computePhases(py, L) };  // each: length-L phase or null
+}
+
+function accumulatePhases2D(rE, rI, wEE, wIE, wEI, wII, L) {
+  const N = L * L, half = Math.floor(L / 2);
+  const TWO_PI = 2 * Math.PI, NORM = Math.PI * Math.SQRT2;  // max 2D phase distance
+  const phE = computePhases2D(rE, L), phI = computePhases2D(rI, L);
+
+  // fresh random subsample of grid points each frame (EWMA averages over time)
+  const S = Math.min(PHASE_SAMPLE, N);
+  const idx = new Int32Array(S);
+  for (let k = 0; k < S; k++) idx[k] = (Math.random() * N) | 0;
+
+  const tps = [
+    ['EE', phE, phE, wEE],
+    ['EI', phE, phI, wEI],
+    ['IE', phI, phE, wIE],
+    ['II', phI, phI, wII],
+  ];
+  const sumFrame = new Float64Array(NBINS);
+  const cntFrame = new Float64Array(NBINS);
+  for (const [tk, post, pre, w] of tps) {
+    const acc = phaseAcc[tk];
+    if (!post.x || !post.y || !pre.x || !pre.y) continue;   // a population is silent
+
+    let kernelZero = true;
+    for (let k = 0; k < N; k++) { if (w[k] !== 0) { kernelZero = false; break; } }
+    if (kernelZero) { acc.val.fill(0); continue; }
+
+    sumFrame.fill(0); cntFrame.fill(0);
+    for (let a = 0; a < S; a++) {
+      const ia = idx[a], xa = ia % L, ya = (ia / L) | 0;
+      const pxa = post.x[xa], pya = post.y[ya];
+      for (let b = 0; b < S; b++) {
+        const ib = idx[b], xb = ib % L, yb = (ib / L) | 0;
+        let ddx = pxa - pre.x[xb]; ddx = ((ddx % TWO_PI) + TWO_PI) % TWO_PI; if (ddx > Math.PI) ddx = TWO_PI - ddx;
+        let ddy = pya - pre.y[yb]; ddy = ((ddy % TWO_PI) + TWO_PI) % TWO_PI; if (ddy > Math.PI) ddy = TWO_PI - ddy;
+        let bin = (Math.sqrt(ddx*ddx + ddy*ddy) / NORM * NBINS) | 0;
+        if (bin >= NBINS) bin = NBINS - 1;
+        const offx = ((xa - xb + half) % L + L) % L;
+        const offy = ((ya - yb + half) % L + L) % L;
+        sumFrame[bin] += Math.abs(w[offy * L + offx]);
+        cntFrame[bin] += 1;
+      }
+    }
+    for (let bn = 0; bn < NBINS; bn++) {
+      if (cntFrame[bn] > 0) {
+        const frameVal = sumFrame[bn] / cntFrame[bn];
+        acc.val[bn] = Number.isFinite(acc.val[bn])
+          ? (1 - EWMA_ALPHA) * acc.val[bn] + EWMA_ALPHA * frameVal
           : frameVal;
       }
     }
@@ -889,50 +1227,163 @@ function updatePhaseCharts() {
   }
   const ySharedMax = yMax > 0 ? yMax * 1.1 : 1;
 
-  for (const tk of ['EE','EI','IE','II']) {
-    const ch = phaseCharts[tk];
+  PHASE_ORDER.forEach((tk, i) => {
     const acc = phaseAcc[tk];
     const pts = new Array(NBINS);
     for (let b = 0; b < NBINS; b++) {
       pts[b] = { x: _binCenters[b], y: acc.val[b] };
     }
-    ch.data.datasets[0].data = pts;
-    ch.options.scales.y.min = 0;
-    ch.options.scales.y.max = ySharedMax;
-    ch.update('none');
-  }
+    phaseChart.data.datasets[i].data = pts;
+  });
+  phaseChart.options.scales.y.min = 0;
+  phaseChart.options.scales.y.max = ySharedMax;
+  phaseChart.update('none');
 }
 
-let currentN = 0;
+// ── Viridis colormap + heatmap rendering (2D mode) ─────────────────────
+const VIRIDIS = [
+  [0.00, 68,1,84], [0.13, 71,44,122], [0.25, 59,81,139], [0.38, 44,113,142],
+  [0.50, 33,144,141], [0.63, 39,173,129], [0.75, 92,200,99], [0.88, 170,220,50],
+  [1.00, 253,231,37],
+];
+const VLUT = new Uint8Array(256 * 3);
+(function buildVLUT() {
+  for (let i = 0; i < 256; i++) {
+    const t = i / 255;
+    let a = VIRIDIS[0], b = VIRIDIS[VIRIDIS.length - 1];
+    for (let j = 1; j < VIRIDIS.length; j++) {
+      if (t <= VIRIDIS[j][0]) { a = VIRIDIS[j - 1]; b = VIRIDIS[j]; break; }
+    }
+    const f = (b[0] - a[0]) > 0 ? (t - a[0]) / (b[0] - a[0]) : 0;
+    VLUT[i*3]   = Math.round(a[1] + f * (b[1] - a[1]));
+    VLUT[i*3+1] = Math.round(a[2] + f * (b[2] - a[2]));
+    VLUT[i*3+2] = Math.round(a[3] + f * (b[3] - a[3]));
+  }
+})();
+
+function drawHeatmap(canvas, field, L, vmin, vmax) {
+  if (canvas.width !== L) canvas.width = L;
+  if (canvas.height !== L) canvas.height = L;
+  const ctx = canvas._ctx || (canvas._ctx = canvas.getContext('2d'));
+  let img = canvas._img;
+  if (!img || img.width !== L) img = canvas._img = ctx.createImageData(L, L);
+  const data = img.data;
+  const range = (vmax > vmin) ? (vmax - vmin) : 1;
+  const M = L * L;
+  for (let k = 0; k < M; k++) {
+    let t = (field[k] - vmin) / range;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const idx = (t * 255) | 0, o = k * 4, vo = idx * 3;
+    data[o] = VLUT[vo]; data[o+1] = VLUT[vo+1]; data[o+2] = VLUT[vo+2]; data[o+3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+// uniform (constant) field → single colour (β_E / β_I panels)
+function drawUniform(canvas, value, vmin, vmax) {
+  if (canvas.width !== 1) canvas.width = 1;
+  if (canvas.height !== 1) canvas.height = 1;
+  const ctx = canvas._ctx || (canvas._ctx = canvas.getContext('2d'));
+  const range = (vmax > vmin) ? (vmax - vmin) : 1;
+  let t = (value - vmin) / range; t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const idx = (t * 255) | 0;
+  ctx.fillStyle = `rgb(${VLUT[idx*3]},${VLUT[idx*3+1]},${VLUT[idx*3+2]})`;
+  ctx.fillRect(0, 0, 1, 1);
+}
+
+function fieldRange(f) {
+  let lo = Infinity, hi = -Infinity;
+  for (let k = 0; k < f.length; k++) { const v = f[k]; if (v < lo) lo = v; if (v > hi) hi = v; }
+  return [lo, hi];
+}
+
+function centerRow(arr, L) {
+  const cy = Math.floor(L / 2), off = cy * L, out = new Array(L);
+  for (let x = 0; x < L; x++) out[x] = arr[off + x];
+  return out;
+}
+
+const HM = {
+  E: document.getElementById('hm_E'), I: document.getElementById('hm_I'),
+  EE: document.getElementById('hm_g_EE'), EI: document.getElementById('hm_g_EI'),
+  IE: document.getElementById('hm_g_IE'), II: document.getElementById('hm_g_II'),
+  ga: document.getElementById('hm_g_a'),
+};
+
+let currentN = 0, currentDims = 0;
+let gaScaleMax = 0;   // peak-hold colour scale for |g_a| (decays slowly)
 
 function updateCharts(d) {
-  if (d.n !== currentN) {
-    currentN = d.n;
-    const labels = Array.from({length: d.n}, (_, i) => i + 1);
-    for (const ch of charts) {
+  const is2d = d.dims === 2;
+  const L = d.L;
+  const wlen = is2d ? L : d.n;   // weights line uses a centre-row slice in 2D
+
+  if (wlen !== currentN || d.dims !== currentDims) {
+    currentN = wlen; currentDims = d.dims;
+    const labels = Array.from({length: wlen}, (_, i) => i + 1);
+    const wch = [charts[0]].concat(is2d ? [] : [charts[1], charts[2]]);
+    for (const ch of wch) {
       ch.data.labels = labels;
       ch.options.scales.x.min = 1;
-      ch.options.scales.x.max = d.n;
+      ch.options.scales.x.max = wlen;
     }
     resetPhaseAcc();
   }
-  const betaE = new Array(d.n).fill(d.beta_E);
-  const betaI = new Array(d.n).fill(d.beta_I);
 
-  const payloads = [
-    [d.w_EE, d.w_IE, d.w_EI, d.w_II],
-    [d.r_E, d.r_I],
-    [d.g_EE, d.g_EI, d.g_IE, d.g_II, betaE, betaI],
-  ];
-  for (let ci = 0; ci < charts.length; ci++) {
-    const ch = charts[ci];
-    for (let di = 0; di < ch.data.datasets.length; di++) {
-      ch.data.datasets[di].data = payloads[ci][di];
+  // Weights plot (line in both modes; centre-row slice of the 2D kernel in 2D)
+  const w = is2d
+    ? [centerRow(d.w_EE,L), centerRow(d.w_IE,L), centerRow(d.w_EI,L), centerRow(d.w_II,L)]
+    : [d.w_EE, d.w_IE, d.w_EI, d.w_II];
+  for (let di = 0; di < 4; di++) charts[0].data.datasets[di].data = w[di];
+  charts[0].update('none');
+
+  if (is2d) {
+    // Firing-rate heatmaps (E, I share a [0, max] scale)
+    let rmax = 0;
+    for (let k = 0; k < d.r_E.length; k++) {
+      if (d.r_E[k] > rmax) rmax = d.r_E[k];
+      if (d.r_I[k] > rmax) rmax = d.r_I[k];
     }
-    ch.update('none');
+    drawHeatmap(HM.E, d.r_E, L, 0, rmax);
+    drawHeatmap(HM.I, d.r_I, L, 0, rmax);
+
+    // Each g_* panel auto-scales independently to its own min/max.
+    let r;
+    r = fieldRange(d.g_EE); drawHeatmap(HM.EE, d.g_EE, L, r[0], r[1]);
+    r = fieldRange(d.g_EI); drawHeatmap(HM.EI, d.g_EI, L, r[0], r[1]);
+    r = fieldRange(d.g_IE); drawHeatmap(HM.IE, d.g_IE, L, r[0], r[1]);
+    r = fieldRange(d.g_II); drawHeatmap(HM.II, d.g_II, L, r[0], r[1]);
+    // |g_a|: its shape barely changes while amplitude drifts slowly, so a
+    // per-frame min/max would divide the amplitude out and render identical
+    // frames (looks "stuck"). Use a slowly-decaying peak-hold scale instead.
+    const ga = new Float32Array(L * L);
+    let gmax = 0;
+    if (d.adapt) for (let k = 0; k < ga.length; k++) {
+      const v = Math.abs(d.g_adapt[k]); ga[k] = v; if (v > gmax) gmax = v;
+    }
+    gaScaleMax = Math.max(gmax, gaScaleMax * 0.97);
+    drawHeatmap(HM.ga, ga, L, 0, gaScaleMax || 1);
+
+    // True 2D phase similarity over the torus
+    accumulatePhases2D(d.r_E, d.r_I, d.w_EE, d.w_IE, d.w_EI, d.w_II, L);
+  } else {
+    const betaE = new Array(d.n).fill(d.beta_E);
+    const betaI = new Array(d.n).fill(d.beta_I);
+    const gAdapt = d.adapt ? d.g_adapt : [];   // empty → not drawn / not in legend
+    const payloads = [
+      [d.r_E, d.r_I],
+      [d.g_EE, d.g_EI, d.g_IE, d.g_II, betaE, betaI, gAdapt],
+    ];
+    for (let ci = 0; ci < 2; ci++) {
+      const ch = charts[ci + 1];
+      for (let di = 0; di < ch.data.datasets.length; di++) {
+        ch.data.datasets[di].data = payloads[ci][di];
+      }
+      ch.update('none');
+    }
+    accumulatePhases(d.r_E, d.r_I, d.w_EE, d.w_IE, d.w_EI, d.w_II, d.n);
   }
 
-  accumulatePhases(d.r_E, d.r_I, d.w_EE, d.w_IE, d.w_EI, d.w_II, d.n);
   updatePhaseCharts();
 }
 
@@ -952,10 +1403,16 @@ worker.onmessage = e => { if (e.data.type === 'update') pendingUpdate = e.data; 
 function getParams() {
   const p = {
     n:       Math.pow(2, +document.getElementById('n_exp').value),
+    dims:    document.getElementById('use_2d').checked ? 2 : 1,
     spiking: document.getElementById('use_spiking').checked,
     beta_E:  +document.getElementById('beta_E').value,
     beta_I:  +document.getElementById('beta_I').value,
     sig_env: sliderToSig(+document.getElementById('sig_env').value),
+    adapt:   document.getElementById('use_adapt').checked,
+    w_a:     +document.getElementById('amp_a').value,
+    tau_a:   sliderToTau(+document.getElementById('tau_a').value),
+    reset:   document.getElementById('use_reset').checked,
+    t_reset: +document.getElementById('t_reset').value,
   };
   for (const r of WT_ROWS) {
     p['sig_'+r.id] = sliderToSig(+document.getElementById('sig_'+r.id).value);
@@ -991,10 +1448,25 @@ document.getElementById('startstop').addEventListener('click', () => {
 // ── Wire up all controls ──────────────────────────────────────────────
 document.getElementById('use_spiking').addEventListener('change', sendParams);
 
-document.getElementById('phase_binarize').addEventListener('change', e => {
-  phaseBinarize = e.target.checked;
+// 1D / 2D mode: swap the firing-rate & inputs slots between line charts and
+// heatmap grids; the control panel and the Weights plot are unchanged.
+function setMode(twoD) {
+  document.getElementById('dim_label').textContent = twoD ? '2D' : '1D';
+  document.getElementById('c2').style.display = twoD ? 'none' : '';
+  document.getElementById('c4').style.display = twoD ? 'none' : '';
+  document.getElementById('rate-2d').style.display = twoD ? 'flex' : 'none';
+  document.getElementById('inputs-2d').style.display = twoD ? 'flex' : 'none';
+  if (!twoD) { charts[1].resize(); charts[2].resize(); }
   resetPhaseAcc();
-  updatePhaseYLabels();
+  sendParams();        // dims change → worker reallocates & re-seeds
+  requestAnimationFrame(sizePhaseSquare);
+}
+document.getElementById('use_2d').addEventListener('change', e => {
+  if (e.target.checked) {   // default to 64 neurons when switching to 2D
+    document.getElementById('n_exp').value = 6;
+    document.getElementById('n_val').textContent = 64;
+  }
+  setMode(e.target.checked);
 });
 
 document.getElementById('n_exp').addEventListener('input', e => {
@@ -1010,6 +1482,19 @@ document.getElementById('beta_I').addEventListener('input', e => {
 document.getElementById('sig_env').addEventListener('input', e => {
   document.getElementById('sig_env_v').textContent = fmtSig(sliderToSig(+e.target.value));
   sendParams();
+});
+
+// Adaptation controls
+document.getElementById('use_adapt').addEventListener('change', sendParams);
+document.getElementById('amp_a').addEventListener('input', e => {
+  document.getElementById('amp_a_val').textContent = e.target.value; sendParams();
+});
+document.getElementById('tau_a').addEventListener('input', e => {
+  document.getElementById('tau_a_val').textContent = fmtTau(sliderToTau(+e.target.value)); sendParams();
+});
+document.getElementById('use_reset').addEventListener('change', sendParams);
+document.getElementById('t_reset').addEventListener('input', e => {
+  document.getElementById('t_reset_val').textContent = (+e.target.value).toFixed(1); sendParams();
 });
 
 for (const r of WT_ROWS) {
@@ -1058,6 +1543,18 @@ function loadPreset(p) {
   document.getElementById('beta_I_val').textContent = p.beta_I;
   document.getElementById('sig_env').value = sigToSlider(p.sig_env).toFixed(3);
   document.getElementById('sig_env_v').textContent = fmtSig(p.sig_env);
+  // Adaptation (older presets may not include these fields)
+  document.getElementById('use_adapt').checked = !!p.adapt;
+  const wa = p.w_a != null ? p.w_a : 1;
+  document.getElementById('amp_a').value = wa;
+  document.getElementById('amp_a_val').textContent = wa;
+  const tauA = p.tau_a != null ? p.tau_a : 3.0;
+  document.getElementById('tau_a').value = tauToSlider(tauA).toFixed(3);
+  document.getElementById('tau_a_val').textContent = fmtTau(tauA);
+  document.getElementById('use_reset').checked = !!p.reset;
+  const tr = p.t_reset != null ? p.t_reset : 5;
+  document.getElementById('t_reset').value = tr;
+  document.getElementById('t_reset_val').textContent = (+tr).toFixed(1);
   for (const r of WT_ROWS) {
     const sig = p['sig_'+r.id];
     document.getElementById('sig_'+r.id).value = sigToSlider(sig).toFixed(3);
@@ -1069,7 +1566,9 @@ function loadPreset(p) {
     document.getElementById('inv_'+r.id).checked = !!p['inv_'+r.id];
     document.getElementById('bin_'+r.id).checked = !!p['bin_'+r.id];
   }
-  sendParams();
+  const twoD = p.dims === 2;
+  document.getElementById('use_2d').checked = twoD;
+  setMode(twoD);   // swaps layout + calls sendParams
 }
 
 function renderPresets() {
@@ -1114,6 +1613,23 @@ document.getElementById('preset_name').addEventListener('keydown', e => {
 
 restorePresets();
 renderPresets();
+
+// ── Keep the combined mean-weight plot square ──────────────────────────
+// Match its height to the Weights plot and set width equal to that height,
+// so the panel is always square and sits flush beside the Weights plot.
+function sizePhaseSquare() {
+  const wWrap = document.getElementById('weights-wrap');
+  const wrap = document.getElementById('phase-wrap');
+  const side = wWrap.clientHeight;   // match the Weights plot's height → square
+  if (side > 0) {
+    wrap.style.height = side + 'px';
+    wrap.style.width = side + 'px';
+    phaseChart.resize();
+  }
+}
+
+window.addEventListener('resize', sizePhaseSquare);
+requestAnimationFrame(sizePhaseSquare);
 </script>
 </body>
 </html>
