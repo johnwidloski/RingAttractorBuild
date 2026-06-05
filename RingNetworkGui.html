@@ -306,6 +306,11 @@ input[type=text]#preset_name:focus { border-color: #58a6ff; }
       <input type="checkbox" id="use_2d">
       <span class="tog-track"></span>
     </label>
+    <span class="lbl" style="min-width:auto; margin-left:12px">Slow</span>
+    <label class="tog">
+      <input type="checkbox" id="slow_speed">
+      <span class="tog-track"></span>
+    </label>
   </div>
 
   <!-- Weights -->
@@ -367,16 +372,28 @@ input[type=text]#preset_name:focus { border-color: #58a6ff; }
       <input type="range" id="t_reset" min="1" max="10" step="0.1" value="5" style="min-width:50px">
       <span class="sval" id="t_reset_val" style="min-width:auto">5.0</span>
     </div>
+    <div class="ctrl-row" style="margin-left: 40px;">
+      <span class="lbl" style="min-width:auto">σ</span>
+      <input type="range" id="pulse_sig" min="0.01" max="0.5" step="0.005" value="0.0625" style="min-width:50px">
+      <span class="sval" id="pulse_sig_val" style="min-width:auto">0.063</span>
+      <span class="lbl" style="min-width:auto; margin-left:10px">amp</span>
+      <input type="range" id="pulse_amp" min="0" max="1000" step="10" value="500" style="min-width:50px">
+      <span class="sval" id="pulse_amp_val" style="min-width:auto">500</span>
+      <span class="lbl" style="min-width:auto; margin-left:10px">dur</span>
+      <input type="range" id="pulse_dur" min="10" max="500" step="5" value="50" style="min-width:50px">
+      <span class="sval" id="pulse_dur_val" style="min-width:auto">50ms</span>
+    </div>
   </div>
 
   <!-- Presets -->
   <div>
-    <div class="sec-title">Presets</div>
+    <div class="sec-title" id="presets_title" title="">Presets</div>
     <div class="preset-row">
       <input type="text" id="preset_name" placeholder="preset name">
       <button id="preset_save" class="preset-del" style="width:auto; padding:0 12px;">Save</button>
     </div>
     <div id="preset_list"></div>
+    <div id="preset_status" style="font-size:12px; color:#6e7681; min-height:14px;"></div>
   </div>
 
 </div>
@@ -614,25 +631,42 @@ function allocBuffers(n) {
 
   if (D === 2) {
     const c = Math.floor(L / 2);
-    const sig = Math.max(1, L * PULSE_SIG_FRAC);
+    r_E[c * L + c] = 1; // seed bump at centre pixel
+  } else {
+    const c = Math.floor(n / 2);
+    r_E[Math.max(0, c - 1)] = 1; // seed bump
+  }
+  buildPulseBlob();
+  // each run: silence → centre pulse
+  resetElapsed = 0; silenceRemaining = SILENCE_DUR;
+  pulseRemaining = params ? params.pulse_dur : PULSE_DUR;
+}
+
+// Fill the reset-pulse drive from the current params (amplitude + Gaussian
+// width as a fraction of N). Rebuilt whenever those sliders change, so the
+// pulse shape updates without re-seeding the bump.
+function buildPulseBlob() {
+  if (!pulseBlob) return;
+  const amp = params ? params.pulse_amp : PULSE_AMP;
+  const sigFrac = params ? params.pulse_sig_frac : PULSE_SIG_FRAC;
+  if (D === 2) {
+    const c = Math.floor(L / 2);
+    const sig = Math.max(1, L * sigFrac);
     for (let y = 0; y < L; y++) {
       const dy = y - c;
       for (let x = 0; x < L; x++) {
         const dx = x - c;
-        pulseBlob[y * L + x] = PULSE_AMP * Math.exp(-0.5 * (dx * dx + dy * dy) / (sig * sig));
+        pulseBlob[y * L + x] = amp * Math.exp(-0.5 * (dx * dx + dy * dy) / (sig * sig));
       }
     }
-    r_E[c * L + c] = 1; // seed bump at centre pixel
   } else {
-    const c = Math.floor(n / 2);
-    const sig = Math.max(1, n * PULSE_SIG_FRAC);
-    for (let i = 0; i < n; i++) {
+    const c = Math.floor(N / 2);
+    const sig = Math.max(1, N * sigFrac);
+    for (let i = 0; i < N; i++) {
       const dd = i - c;
-      pulseBlob[i] = PULSE_AMP * Math.exp(-0.5 * (dd / sig) * (dd / sig));
+      pulseBlob[i] = amp * Math.exp(-0.5 * (dd / sig) * (dd / sig));
     }
-    r_E[Math.max(0, c - 1)] = 1; // seed bump
   }
-  resetElapsed = 0; silenceRemaining = SILENCE_DUR; pulseRemaining = PULSE_DUR;  // each run: silence → centre pulse
 }
 
 function applyParams(p) {
@@ -642,9 +676,10 @@ function applyParams(p) {
   const resize = newN !== N || dims !== D;
   D = dims; L = side; N = newN;
   if (D === 2) { ftBufRe = new Float64Array(L); ftBufIm = new Float64Array(L); }
+  params = p;
   initWeights(p);
   if (resize || r_E === null) allocBuffers(N);
-  params = p;
+  else buildPulseBlob();   // pulse-only changes: rebuild shape without re-seeding
 }
 
 // ── Convolution (in-place, uses wkRe/wkIm) ───────────────────────────
@@ -699,14 +734,17 @@ function tick() {
   const adaptOn = params.adapt, wa = params.w_a, tauA = params.tau_a;
   const resetOn = params.reset, tReset = params.t_reset;
   const conv = (D === 2) ? circConvInto2D : circConvInto;
-  const steps = (D === 2) ? STEPS_2D : STEPS_PER_TICK;
+  // Playback speed scales sim-time advanced per rendered frame: <1 = slow-mo,
+  // >1 = fast-forward (more steps/tick).
+  const baseSteps = (D === 2) ? STEPS_2D : STEPS_PER_TICK;
+  const steps = Math.max(1, Math.round(baseSteps * (params.speed || 1)));
 
   for (let s = 0; s < steps; s++) {
     // Periodic reset: every T_reset, silence briefly, then fire a centre pulse.
     if (resetOn) {
       resetElapsed += dt;
       if (resetElapsed >= tReset) {
-        silenceRemaining = SILENCE_DUR; pulseRemaining = PULSE_DUR; resetElapsed = 0;
+        silenceRemaining = SILENCE_DUR; pulseRemaining = params.pulse_dur; resetElapsed = 0;
       }
     }
 
@@ -1402,6 +1440,7 @@ worker.onmessage = e => { if (e.data.type === 'update') pendingUpdate = e.data; 
 // ── Parameter collection ──────────────────────────────────────────────
 function getParams() {
   const p = {
+    speed:   document.getElementById('slow_speed').checked ? 0.01 : 1,
     n:       Math.pow(2, +document.getElementById('n_exp').value),
     dims:    document.getElementById('use_2d').checked ? 2 : 1,
     spiking: document.getElementById('use_spiking').checked,
@@ -1413,6 +1452,9 @@ function getParams() {
     tau_a:   +document.getElementById('tau_a').value,
     reset:   document.getElementById('use_reset').checked,
     t_reset: +document.getElementById('t_reset').value,
+    pulse_sig_frac: +document.getElementById('pulse_sig').value,
+    pulse_amp:      +document.getElementById('pulse_amp').value,
+    pulse_dur:      +document.getElementById('pulse_dur').value / 1000,  // ms → s
   };
   for (const r of WT_ROWS) {
     p['sig_'+r.id] = sliderToSig(+document.getElementById('sig_'+r.id).value);
@@ -1447,6 +1489,7 @@ document.getElementById('startstop').addEventListener('click', () => {
 
 // ── Wire up all controls ──────────────────────────────────────────────
 document.getElementById('use_spiking').addEventListener('change', sendParams);
+document.getElementById('slow_speed').addEventListener('change', sendParams);
 
 // 1D / 2D mode: swap the firing-rate & inputs slots between line charts and
 // heatmap grids; the control panel and the Weights plot are unchanged.
@@ -1496,6 +1539,15 @@ document.getElementById('use_reset').addEventListener('change', sendParams);
 document.getElementById('t_reset').addEventListener('input', e => {
   document.getElementById('t_reset_val').textContent = (+e.target.value).toFixed(1); sendParams();
 });
+document.getElementById('pulse_sig').addEventListener('input', e => {
+  document.getElementById('pulse_sig_val').textContent = (+e.target.value).toFixed(3); sendParams();
+});
+document.getElementById('pulse_amp').addEventListener('input', e => {
+  document.getElementById('pulse_amp_val').textContent = e.target.value; sendParams();
+});
+document.getElementById('pulse_dur').addEventListener('input', e => {
+  document.getElementById('pulse_dur_val').textContent = e.target.value + 'ms'; sendParams();
+});
 
 for (const r of WT_ROWS) {
   document.getElementById('sig_'+r.id).addEventListener('input', e => {
@@ -1510,8 +1562,73 @@ for (const r of WT_ROWS) {
 }
 
 // ── Presets ───────────────────────────────────────────────────────────
+// Shared presets live in presets.json in the repo. Everyone reads that file
+// (no auth). The repo owner can paste a fine-grained PAT (Contents r/w on this
+// repo only); it is kept solely in their browser's localStorage and is used to
+// commit the file via the GitHub API on Save/Delete. Visitors without a token
+// only ever read — their Save/Delete stay local to their browser.
 const PRESET_STORAGE_KEY = 'ring_attractor_presets';
+const GH_TOKEN_KEY = 'ring_attractor_gh_token';
+const GH_OWNER = 'johnwidloski';
+const GH_REPO = 'RingAttractor';
+const GH_BRANCH = 'main';
+const GH_PATH = 'presets.json';
+const GH_API = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${GH_PATH}`;
+const SHARED_URL = `https://raw.githubusercontent.com/${GH_OWNER}/${GH_REPO}/${GH_BRANCH}/${GH_PATH}`;
 const presets = {};
+
+// base64 <-> UTF-8 string (GitHub Contents API uses base64)
+const b64encode = str => btoa(unescape(encodeURIComponent(str)));
+
+const getToken = () => localStorage.getItem(GH_TOKEN_KEY) || '';
+function setPresetStatus(msg) {
+  const el = document.getElementById('preset_status');
+  if (el) el.textContent = msg || '';
+}
+
+// Fetch the shared presets committed to the repo and merge them in. Local
+// presets (from this browser's previous saves) take precedence on name clash.
+async function loadSharedPresets() {
+  try {
+    const res = await fetch(SHARED_URL + '?t=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return;  // 404 until presets.json is first committed
+    const shared = await res.json();
+    if (shared && typeof shared === 'object') {
+      for (const k of Object.keys(shared)) {
+        if (!(k in presets)) presets[k] = shared[k];
+      }
+      renderPresets();
+    }
+  } catch (err) {
+    console.warn('Failed to load shared presets:', err);
+  }
+}
+
+// Commit the current preset set to the repo (owner only — no-op without token).
+async function commitPresets() {
+  const token = getToken();
+  if (!token) return;
+  setPresetStatus('Committing…');
+  try {
+    const hdr = { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' };
+    // Need the current file SHA to update it (omit on first-ever create).
+    let sha;
+    const getRes = await fetch(GH_API + '?ref=' + GH_BRANCH, { headers: hdr, cache: 'no-store' });
+    if (getRes.ok) sha = (await getRes.json()).sha;
+    const body = {
+      message: 'Update presets',
+      content: b64encode(JSON.stringify(presets, null, 2)),
+      branch: GH_BRANCH,
+    };
+    if (sha) body.sha = sha;
+    const putRes = await fetch(GH_API, { method: 'PUT', headers: hdr, body: JSON.stringify(body) });
+    if (!putRes.ok) throw new Error('HTTP ' + putRes.status + ' — ' + (await putRes.text()).slice(0, 200));
+    setPresetStatus('Committed ✓ (live for everyone in ~1 min)');
+  } catch (err) {
+    console.error('Commit failed:', err);
+    setPresetStatus('Commit failed — ' + err.message);
+  }
+}
 
 function persistPresets() {
   try {
@@ -1534,6 +1651,7 @@ function restorePresets() {
 
 function loadPreset(p) {
   document.getElementById('use_spiking').checked = !!p.spiking;
+  document.getElementById('slow_speed').checked = (p.speed != null && p.speed < 1);
   const n_exp = Math.round(Math.log2(p.n));
   document.getElementById('n_exp').value = n_exp;
   document.getElementById('n_val').textContent = Math.pow(2, n_exp);
@@ -1555,6 +1673,16 @@ function loadPreset(p) {
   const tr = p.t_reset != null ? p.t_reset : 5;
   document.getElementById('t_reset').value = tr;
   document.getElementById('t_reset_val').textContent = (+tr).toFixed(1);
+  // Reset-pulse shape (older presets may not include these fields)
+  const psig = p.pulse_sig_frac != null ? p.pulse_sig_frac : 0.0625;
+  document.getElementById('pulse_sig').value = psig;
+  document.getElementById('pulse_sig_val').textContent = (+psig).toFixed(3);
+  const pamp = p.pulse_amp != null ? p.pulse_amp : 500;
+  document.getElementById('pulse_amp').value = pamp;
+  document.getElementById('pulse_amp_val').textContent = pamp;
+  const pdurMs = Math.round((p.pulse_dur != null ? p.pulse_dur : 0.050) * 1000);
+  document.getElementById('pulse_dur').value = pdurMs;
+  document.getElementById('pulse_dur_val').textContent = pdurMs + 'ms';
   for (const r of WT_ROWS) {
     const sig = p['sig_'+r.id];
     document.getElementById('sig_'+r.id).value = sigToSlider(sig).toFixed(3);
@@ -1590,6 +1718,7 @@ function renderPresets() {
       delete presets[name];
       persistPresets();
       renderPresets();
+      commitPresets();
     });
     row.appendChild(loadBtn);
     row.appendChild(delBtn);
@@ -1605,14 +1734,35 @@ document.getElementById('preset_save').addEventListener('click', () => {
   nameInput.value = '';
   persistPresets();
   renderPresets();
+  commitPresets();
 });
 
 document.getElementById('preset_name').addEventListener('keydown', e => {
   if (e.key === 'Enter') document.getElementById('preset_save').click();
 });
 
+// Admin: set/clear the GitHub token (owner only). No dedicated button — click
+// the "Presets" header to paste it once. Stored in localStorage on this
+// machine only; never committed, never in page source.
+function updateAdminUI() {
+  if (getToken()) setPresetStatus('Committing enabled — Save/Delete push to the repo.');
+}
+document.getElementById('presets_title').addEventListener('click', () => {
+  const cur = getToken();
+  const next = prompt(
+    'GitHub fine-grained token (Contents: read/write on ' + GH_OWNER + '/' + GH_REPO + ').\n' +
+    'Leave blank and OK to clear it. Stored only in this browser.',
+    cur);
+  if (next === null) return;              // cancelled
+  const t = next.trim();
+  if (t) { localStorage.setItem(GH_TOKEN_KEY, t); setPresetStatus('Token saved — committing enabled.'); }
+  else { localStorage.removeItem(GH_TOKEN_KEY); setPresetStatus('Token cleared — read-only.'); }
+});
+
 restorePresets();
 renderPresets();
+updateAdminUI();
+loadSharedPresets();   // pull the committed presets everyone shares
 
 // ── Keep the combined mean-weight plot square ──────────────────────────
 // Match its height to the Weights plot and set width equal to that height,
