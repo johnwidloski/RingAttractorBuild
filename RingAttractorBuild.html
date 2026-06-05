@@ -363,6 +363,11 @@ input[type=text]#preset_name:focus { border-color: #58a6ff; }
       <input type="range" id="tau_a" min="0.1" max="6" step="0.1" value="3" style="min-width:50px">
       <span class="sval" id="tau_a_val" style="min-width:auto">3.0</span>
     </div>
+  </div>
+
+  <!-- Resetting -->
+  <div>
+    <div class="sec-title">Resetting</div>
     <div class="ctrl-row">
       <label class="tog">
         <input type="checkbox" id="use_reset">
@@ -1588,20 +1593,35 @@ function setPresetStatus(msg) {
 
 // Fetch the shared presets committed to the repo and merge them in. Local
 // presets (from this browser's previous saves) take precedence on name clash.
+// Returns the shared set as committed (so callers can tell what was already
+// published), after merging it into the in-memory presets.
 async function loadSharedPresets() {
+  let shared = {};
   try {
     const res = await fetch(SHARED_URL + '?t=' + Date.now(), { cache: 'no-store' });
-    if (!res.ok) return;  // 404 until presets.json is first committed
-    const shared = await res.json();
-    if (shared && typeof shared === 'object') {
-      for (const k of Object.keys(shared)) {
-        if (!(k in presets)) presets[k] = shared[k];
+    if (res.ok) {
+      const j = await res.json();
+      if (j && typeof j === 'object') {
+        shared = j;
+        for (const k of Object.keys(shared)) {
+          if (!(k in presets)) presets[k] = shared[k];
+        }
+        renderPresets();
       }
-      renderPresets();
     }
   } catch (err) {
     console.warn('Failed to load shared presets:', err);
   }
+  return shared;
+}
+
+// True if the in-memory presets contain anything not already in `shared`
+// (a name that's missing, or a preset whose contents differ).
+function hasUnpublished(shared) {
+  for (const k of Object.keys(presets)) {
+    if (JSON.stringify(presets[k]) !== JSON.stringify(shared[k])) return true;
+  }
+  return false;
 }
 
 // Commit the current preset set to the repo (owner only — no-op without token).
@@ -1762,7 +1782,12 @@ document.getElementById('presets_title').addEventListener('click', () => {
 restorePresets();
 renderPresets();
 updateAdminUI();
-loadSharedPresets();   // pull the committed presets everyone shares
+// Pull the shared presets, then (owner only) auto-publish any local presets
+// that aren't in the committed file yet — so presets saved in one place get
+// pushed to the repo without needing to re-save them.
+loadSharedPresets().then(shared => {
+  if (getToken() && hasUnpublished(shared)) commitPresets();
+});
 
 // ── Keep the combined mean-weight plot square ──────────────────────────
 // Match its height to the Weights plot and set width equal to that height,
