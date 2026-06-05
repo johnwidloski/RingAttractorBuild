@@ -355,7 +355,7 @@ input[type=text]#preset_name:focus { border-color: #58a6ff; }
       <input type="range" id="amp_a" min="0" max="10" step="0.1" value="1" style="min-width:50px">
       <span class="sval" id="amp_a_val" style="min-width:auto">1</span>
       <span class="lbl" style="min-width:auto; margin-left:12px">τ_a</span>
-      <input type="range" id="tau_a" min="0" max="1" step="0.001" value="0.739" style="min-width:50px">
+      <input type="range" id="tau_a" min="0.1" max="6" step="0.1" value="3" style="min-width:50px">
       <span class="sval" id="tau_a_val" style="min-width:auto">3.0</span>
     </div>
     <div class="ctrl-row">
@@ -519,7 +519,7 @@ const STEPS_2D = 20;          // fewer steps/tick in 2D (2D FFTs are heavier)
 
 // Periodic reset pulse: brief strong Gaussian drive at the ring centre.
 const SILENCE_DUR = 0.5;      // s — activity silenced just before each reset pulse
-const PULSE_DUR = 0.100;      // s — how long the pulse is held (100 ms)
+const PULSE_DUR = 0.050;      // s — how long the pulse is held (50 ms)
 const PULSE_AMP = 5000;       // peak excitatory drive added to G_E at centre
 const PULSE_SIG_FRAC = 1/16;  // Gaussian width as a fraction of N
 
@@ -1410,7 +1410,7 @@ function getParams() {
     sig_env: sliderToSig(+document.getElementById('sig_env').value),
     adapt:   document.getElementById('use_adapt').checked,
     w_a:     +document.getElementById('amp_a').value,
-    tau_a:   sliderToTau(+document.getElementById('tau_a').value),
+    tau_a:   +document.getElementById('tau_a').value,
     reset:   document.getElementById('use_reset').checked,
     t_reset: +document.getElementById('t_reset').value,
   };
@@ -1490,7 +1490,7 @@ document.getElementById('amp_a').addEventListener('input', e => {
   document.getElementById('amp_a_val').textContent = e.target.value; sendParams();
 });
 document.getElementById('tau_a').addEventListener('input', e => {
-  document.getElementById('tau_a_val').textContent = fmtTau(sliderToTau(+e.target.value)); sendParams();
+  document.getElementById('tau_a_val').textContent = (+e.target.value).toFixed(1); sendParams();
 });
 document.getElementById('use_reset').addEventListener('change', sendParams);
 document.getElementById('t_reset').addEventListener('input', e => {
@@ -1549,8 +1549,8 @@ function loadPreset(p) {
   document.getElementById('amp_a').value = wa;
   document.getElementById('amp_a_val').textContent = wa;
   const tauA = p.tau_a != null ? p.tau_a : 3.0;
-  document.getElementById('tau_a').value = tauToSlider(tauA).toFixed(3);
-  document.getElementById('tau_a_val').textContent = fmtTau(tauA);
+  document.getElementById('tau_a').value = tauA;
+  document.getElementById('tau_a_val').textContent = (+tauA).toFixed(1);
   document.getElementById('use_reset').checked = !!p.reset;
   const tr = p.t_reset != null ? p.t_reset : 5;
   document.getElementById('t_reset').value = tr;
