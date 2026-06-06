@@ -320,7 +320,7 @@ input[type=text]#preset_name:focus { border-color: #58a6ff; }
       <thead>
         <tr>
           <th></th>
-          <th colspan="2">Sigma</th>
+          <th colspan="2">Width</th>
           <th colspan="2">Amplitude</th>
           <th>Invert</th>
           <th>Binarize</th>
@@ -356,10 +356,10 @@ input[type=text]#preset_name:focus { border-color: #58a6ff; }
         <input type="checkbox" id="use_adapt">
         <span class="tog-track"></span>
       </label>
-      <span class="lbl" style="min-width:auto; margin-left:8px">w_a</span>
+      <span class="lbl" style="min-width:auto; margin-left:8px; font-size:12px">Amplitude</span>
       <input type="range" id="amp_a" min="0" max="10" step="0.1" value="1" style="min-width:50px">
       <span class="sval" id="amp_a_val" style="min-width:auto">1</span>
-      <span class="lbl" style="min-width:auto; margin-left:12px">τ_a</span>
+      <span class="lbl" style="min-width:auto; margin-left:12px; font-size:12px">Time constant (s)</span>
       <input type="range" id="tau_a" min="0.1" max="6" step="0.1" value="3" style="min-width:50px">
       <span class="sval" id="tau_a_val" style="min-width:auto">3.0</span>
     </div>
@@ -373,20 +373,20 @@ input[type=text]#preset_name:focus { border-color: #58a6ff; }
         <input type="checkbox" id="use_reset">
         <span class="tog-track"></span>
       </label>
-      <span class="lbl" style="min-width:auto; margin-left:8px">T_reset</span>
-      <input type="range" id="t_reset" min="1" max="10" step="0.1" value="5" style="min-width:50px">
-      <span class="sval" id="t_reset_val" style="min-width:auto">5.0</span>
-    </div>
-    <div class="ctrl-row" style="margin-left: 40px;">
-      <span class="lbl" style="min-width:auto">σ</span>
+      <span class="lbl" style="min-width:auto; margin-left:8px; font-size:12px">Width</span>
       <input type="range" id="pulse_sig" min="0.01" max="0.5" step="0.005" value="0.0625" style="min-width:50px">
       <span class="sval" id="pulse_sig_val" style="min-width:auto">0.063</span>
-      <span class="lbl" style="min-width:auto; margin-left:10px">amp</span>
+      <span class="lbl" style="min-width:auto; margin-left:10px; font-size:12px">Amplitude</span>
       <input type="range" id="pulse_amp" min="0" max="1000" step="10" value="500" style="min-width:50px">
       <span class="sval" id="pulse_amp_val" style="min-width:auto">500</span>
-      <span class="lbl" style="min-width:auto; margin-left:10px">dur</span>
+    </div>
+    <div class="ctrl-row" style="margin-left: 40px;">
+      <span class="lbl" style="min-width:auto; font-size:12px">Duration (ms)</span>
       <input type="range" id="pulse_dur" min="10" max="500" step="5" value="50" style="min-width:50px">
-      <span class="sval" id="pulse_dur_val" style="min-width:auto">50ms</span>
+      <span class="sval" id="pulse_dur_val" style="min-width:auto">50</span>
+      <span class="lbl" style="min-width:auto; margin-left:10px; font-size:12px">Interval (s)</span>
+      <input type="range" id="t_reset" min="1" max="10" step="0.1" value="5" style="min-width:50px">
+      <span class="sval" id="t_reset_val" style="min-width:auto">5.0</span>
     </div>
   </div>
 
@@ -1551,7 +1551,7 @@ document.getElementById('pulse_amp').addEventListener('input', e => {
   document.getElementById('pulse_amp_val').textContent = e.target.value; sendParams();
 });
 document.getElementById('pulse_dur').addEventListener('input', e => {
-  document.getElementById('pulse_dur_val').textContent = e.target.value + 'ms'; sendParams();
+  document.getElementById('pulse_dur_val').textContent = e.target.value; sendParams();
 });
 
 for (const r of WT_ROWS) {
@@ -1702,7 +1702,7 @@ function loadPreset(p) {
   document.getElementById('pulse_amp_val').textContent = pamp;
   const pdurMs = Math.round((p.pulse_dur != null ? p.pulse_dur : 0.050) * 1000);
   document.getElementById('pulse_dur').value = pdurMs;
-  document.getElementById('pulse_dur_val').textContent = pdurMs + 'ms';
+  document.getElementById('pulse_dur_val').textContent = pdurMs;
   for (const r of WT_ROWS) {
     const sig = p['sig_'+r.id];
     document.getElementById('sig_'+r.id).value = sigToSlider(sig).toFixed(3);
