@@ -92,6 +92,29 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 .hm-empty { visibility: hidden; }
 
+/* ── 1D / 2D / 3D segmented toggle ───────────────────────────── */
+.dimseg { display: inline-flex; border: 1px solid #30363d; border-radius: 6px; overflow: hidden; }
+.dimbtn {
+  background: #21262d; color: #8b949e; border: none;
+  padding: 3px 11px; font-size: 13px; cursor: pointer; line-height: 1.3;
+}
+.dimbtn + .dimbtn { border-left: 1px solid #30363d; }
+.dimbtn.active { background: #238636; color: #fff; }
+
+/* ── 3D volume panels ────────────────────────────────────────── */
+#rate-3d, #inputs-3d { gap: 12px; align-items: center; justify-content: center; }
+.vol { position: relative; height: 100%; aspect-ratio: 1 / 1; }
+.vol canvas {
+  width: 100%; height: 100%; display: block;
+  background: #0d1117; border: 1px solid #21262d; cursor: grab;
+}
+.vol canvas:active { cursor: grabbing; }
+.vol-lbl {
+  position: absolute; top: 2px; left: 4px;
+  font-size: 11px; color: #e6edf3; pointer-events: none;
+  text-shadow: 0 0 3px #000, 0 0 3px #000;
+}
+
 /* ── Start / Stop button ─────────────────────────────────────── */
 #startstop {
   width: 100%;
@@ -301,16 +324,28 @@ input[type=text]#preset_name:focus { border-color: #58a6ff; }
     <span class="lbl" style="min-width:auto; margin-left:12px">Neurons</span>
     <input type="range" id="n_exp" min="3" max="10" step="1" value="7" style="min-width:50px">
     <span class="sval" id="n_val">128</span>
-    <span class="lbl" id="dim_label" style="min-width:auto; margin-left:12px">1D</span>
-    <label class="tog">
-      <input type="checkbox" id="use_2d">
-      <span class="tog-track"></span>
-    </label>
+    <span class="lbl" style="min-width:auto; margin-left:12px">Dim</span>
+    <div class="dimseg" id="dimseg">
+      <button type="button" class="dimbtn active" data-dim="1">1D</button>
+      <button type="button" class="dimbtn" data-dim="2">2D</button>
+      <button type="button" class="dimbtn" data-dim="3">3D</button>
+    </div>
     <span class="lbl" style="min-width:auto; margin-left:12px">Slow</span>
     <label class="tog">
       <input type="checkbox" id="slow_speed">
       <span class="tog-track"></span>
     </label>
+  </div>
+
+  <!-- 3D View (only shown in 3D mode) -->
+  <div id="view3d-sec" style="display:none">
+    <div class="sec-title">3D View</div>
+    <div class="ctrl-row">
+      <span class="lbl" style="min-width:auto; font-size:12px">Threshold</span>
+      <input type="range" id="vol_thresh" min="0" max="0.95" step="0.01" value="0.25" style="min-width:50px">
+      <span class="sval" id="vol_thresh_val" style="min-width:auto">0.25</span>
+      <span class="lbl" style="min-width:auto; margin-left:14px; font-size:12px; color:#6e7681">drag a volume to rotate</span>
+    </div>
   </div>
 
   <!-- Weights -->
@@ -357,7 +392,7 @@ input[type=text]#preset_name:focus { border-color: #58a6ff; }
         <span class="tog-track"></span>
       </label>
       <span class="lbl" style="min-width:auto; margin-left:8px; font-size:12px">Amplitude</span>
-      <input type="range" id="amp_a" min="0" max="10" step="0.1" value="1" style="min-width:50px">
+      <input type="range" id="amp_a" min="0" max="20" step="0.1" value="1" style="min-width:50px">
       <span class="sval" id="amp_a_val" style="min-width:auto">1</span>
       <span class="lbl" style="min-width:auto; margin-left:12px; font-size:12px">Time constant (s)</span>
       <input type="range" id="tau_a" min="0.1" max="6" step="0.1" value="3" style="min-width:50px">
@@ -381,11 +416,14 @@ input[type=text]#preset_name:focus { border-color: #58a6ff; }
       <span class="sval" id="pulse_amp_val" style="min-width:auto">500</span>
     </div>
     <div class="ctrl-row" style="margin-left: 40px;">
-      <span class="lbl" style="min-width:auto; font-size:12px">Duration (ms)</span>
+      <span class="lbl" style="min-width:auto; font-size:12px">Silence (ms)</span>
+      <input type="range" id="silence_dur" min="0" max="2000" step="50" value="500" style="min-width:50px">
+      <span class="sval" id="silence_dur_val" style="min-width:auto">500</span>
+      <span class="lbl" style="min-width:auto; margin-left:10px; font-size:12px">Duration (ms)</span>
       <input type="range" id="pulse_dur" min="10" max="500" step="5" value="50" style="min-width:50px">
       <span class="sval" id="pulse_dur_val" style="min-width:auto">50</span>
       <span class="lbl" style="min-width:auto; margin-left:10px; font-size:12px">Interval (s)</span>
-      <input type="range" id="t_reset" min="1" max="10" step="0.1" value="5" style="min-width:50px">
+      <input type="range" id="t_reset" min="0.1" max="5" step="0.1" value="5" style="min-width:50px">
       <span class="sval" id="t_reset_val" style="min-width:auto">5.0</span>
     </div>
   </div>
@@ -416,6 +454,10 @@ input[type=text]#preset_name:focus { border-color: #58a6ff; }
         <div class="hm"><canvas id="hm_E"></canvas><span class="hm-lbl">E</span></div>
         <div class="hm"><canvas id="hm_I"></canvas><span class="hm-lbl">I</span></div>
       </div>
+      <div id="rate-3d" class="hm-row" style="display:none">
+        <div class="vol"><canvas id="vol_E"></canvas><span class="vol-lbl">E</span></div>
+        <div class="vol"><canvas id="vol_I"></canvas><span class="vol-lbl">I</span></div>
+      </div>
     </div>
     <div class="plot-wrap" id="inputs-wrap">
       <canvas id="c4"></canvas>
@@ -429,6 +471,9 @@ input[type=text]#preset_name:focus { border-color: #58a6ff; }
         <div class="hm-row">
           <div class="hm"><canvas id="hm_g_a"></canvas><span class="hm-lbl">|g_a|</span></div>
         </div>
+      </div>
+      <div id="inputs-3d" class="hm-row" style="display:none">
+        <div class="vol"><canvas id="vol_ga"></canvas><span class="vol-lbl">|g_a|</span></div>
       </div>
     </div>
   </div>
@@ -519,6 +564,51 @@ function fftshift2(arr, L) {
   return r;
 }
 
+// ── 3D FFT (separable, power-of-2 side L; volume is L×L×L, idx = (z·L+y)·L+x) ──
+// Reuses the length-L scratch buffers ftBufRe/ftBufIm allocated in applyParams.
+function fft3(re, im, L) {
+  const L2 = L * L;
+  // FFT along x (rows)
+  for (let z = 0; z < L; z++) for (let y = 0; y < L; y++) {
+    const off = (z * L + y) * L;
+    for (let x = 0; x < L; x++) { ftBufRe[x] = re[off + x]; ftBufIm[x] = im[off + x]; }
+    fft(ftBufRe, ftBufIm);
+    for (let x = 0; x < L; x++) { re[off + x] = ftBufRe[x]; im[off + x] = ftBufIm[x]; }
+  }
+  // FFT along y (columns within each z-slice)
+  for (let z = 0; z < L; z++) for (let x = 0; x < L; x++) {
+    const base = z * L2 + x;
+    for (let y = 0; y < L; y++) { ftBufRe[y] = re[base + y * L]; ftBufIm[y] = im[base + y * L]; }
+    fft(ftBufRe, ftBufIm);
+    for (let y = 0; y < L; y++) { re[base + y * L] = ftBufRe[y]; im[base + y * L] = ftBufIm[y]; }
+  }
+  // FFT along z (across slices)
+  for (let y = 0; y < L; y++) for (let x = 0; x < L; x++) {
+    const base = y * L + x;
+    for (let z = 0; z < L; z++) { ftBufRe[z] = re[base + z * L2]; ftBufIm[z] = im[base + z * L2]; }
+    fft(ftBufRe, ftBufIm);
+    for (let z = 0; z < L; z++) { re[base + z * L2] = ftBufRe[z]; im[base + z * L2] = ftBufIm[z]; }
+  }
+}
+function ifft3(re, im, L) {
+  const M = L * L * L;
+  for (let k = 0; k < M; k++) im[k] = -im[k];
+  fft3(re, im, L);
+  for (let k = 0; k < M; k++) { re[k] /= M; im[k] = -im[k] / M; }
+}
+function fftshift3(arr, L) {
+  const s = Math.floor(L / 2), L2 = L * L;
+  const r = new Float64Array(L * L * L);
+  for (let z = 0; z < L; z++) {
+    const zz = (z + s) % L;
+    for (let y = 0; y < L; y++) {
+      const yy = (y + s) % L;
+      for (let x = 0; x < L; x++) r[(z * L + y) * L + x] = arr[(zz * L + yy) * L + ((x + s) % L)];
+    }
+  }
+  return r;
+}
+
 // ── Simulation state ──────────────────────────────────────────────────
 let N = 0, params = null;
 let D = 1, L = 0;   // dimensionality (1 or 2) and side length (2D torus is L×L = N)
@@ -538,9 +628,12 @@ const dt = 0.5 / 1000;
 const tau_s = 30 / 1000;
 const STEPS_PER_TICK = 200;   // simulation steps between UI posts (1D)
 const STEPS_2D = 20;          // fewer steps/tick in 2D (2D FFTs are heavier)
+const STEPS_3D = 3;           // far fewer in 3D (3D FFTs are ~10× a 2D step)
 
 // Periodic reset pulse: brief strong Gaussian drive at the ring centre.
-const SILENCE_DUR = 0.5;      // s — activity silenced just before each reset pulse
+// Fallback defaults (used only if params is unset). Normally the Resetting
+// sliders supply these — and the start-of-run kick reads the same sliders.
+const SILENCE_DUR = 0.5;      // s — silence held before a pulse
 const PULSE_DUR = 0.050;      // s — how long the pulse is held (50 ms)
 const PULSE_AMP = 5000;       // peak excitatory drive added to G_E at centre
 const PULSE_SIG_FRAC = 1/16;  // Gaussian width as a fraction of N
@@ -605,8 +698,51 @@ function computeWeightFT2(w, L) {
   return { re, im };
 }
 
+// 3D isotropic Gaussian kernel (peak 1 at the centre voxel), same options as
+// makeWeightVec; returned in (z·L+y)·L+x order, length L³.
+function makeWeightVec3D(L, sig, amp, inv, bin) {
+  const w = new Float64Array(L * L * L);
+  const ctr = (Math.floor(L / 2) + 1) / L;
+  let mx = 0;
+  for (let z = 0; z < L; z++) {
+    const pz = (z + 1) / L - ctr;
+    for (let y = 0; y < L; y++) {
+      const py = (y + 1) / L - ctr;
+      for (let x = 0; x < L; x++) {
+        const px = (x + 1) / L - ctr;
+        const v = Math.exp(-0.5 * (px * px + py * py + pz * pz) / (sig * sig));
+        w[(z * L + y) * L + x] = v;
+        if (v > mx) mx = v;
+      }
+    }
+  }
+  for (let k = 0; k < w.length; k++) {
+    w[k] /= mx;
+    if (inv) w[k] = 1 - w[k];
+    if (bin) w[k] = w[k] >= 0.5 ? 1 : 0;
+    w[k] *= amp;
+  }
+  return w;
+}
+
+function computeWeightFT3(w, L) {
+  const ws = fftshift3(w, L);
+  const re = new Float64Array(ws);
+  const im = new Float64Array(L * L * L);
+  fft3(re, im, L);
+  return { re, im };
+}
+
 function initWeights(p) {
-  if (D === 2) {
+  if (D === 3) {
+    const env = makeWeightVec3D(L, p.sig_env, 1.0, false, false);
+    for (const nm of ['EE','EI','IE','II']) {
+      const vec = makeWeightVec3D(L, p['sig_'+nm], p['amp_'+nm], p['inv_'+nm], p['bin_'+nm]);
+      for (let k = 0; k < vec.length; k++) vec[k] *= env[k];
+      const ft = computeWeightFT3(vec, L);
+      wFT[nm] = { re: ft.re, im: ft.im, vec };
+    }
+  } else if (D === 2) {
     const env = makeWeightVec2D(L, p.sig_env, 1.0, false, false);
     for (const nm of ['EE','EI','IE','II']) {
       const vec = makeWeightVec2D(L, p['sig_'+nm], p['amp_'+nm], p['inv_'+nm], p['bin_'+nm]);
@@ -634,27 +770,44 @@ function allocBuffers(n) {
   a_E  = new Float64Array(n); g_adapt = new Float64Array(n);
   pulseBlob = new Float64Array(n);
 
-  if (D === 2) {
+  if (D === 3) {
+    const c = Math.floor(L / 2);
+    r_E[(c * L + c) * L + c] = 1; // seed bump at centre voxel
+  } else if (D === 2) {
     const c = Math.floor(L / 2);
     r_E[c * L + c] = 1; // seed bump at centre pixel
   } else {
     const c = Math.floor(n / 2);
     r_E[Math.max(0, c - 1)] = 1; // seed bump
   }
+  // start of run: silence → centre pulse, using the current Resetting params
   buildPulseBlob();
-  // each run: silence → centre pulse
-  resetElapsed = 0; silenceRemaining = SILENCE_DUR;
+  resetElapsed = 0;
+  silenceRemaining = params ? params.silence_dur : SILENCE_DUR;
   pulseRemaining = params ? params.pulse_dur : PULSE_DUR;
 }
 
 // Fill the reset-pulse drive from the current params (amplitude + Gaussian
 // width as a fraction of N). Rebuilt whenever those sliders change, so the
 // pulse shape updates without re-seeding the bump.
-function buildPulseBlob() {
+function buildPulseBlob(ampArg, sigFracArg) {
   if (!pulseBlob) return;
-  const amp = params ? params.pulse_amp : PULSE_AMP;
-  const sigFrac = params ? params.pulse_sig_frac : PULSE_SIG_FRAC;
-  if (D === 2) {
+  const amp = ampArg != null ? ampArg : (params ? params.pulse_amp : PULSE_AMP);
+  const sigFrac = sigFracArg != null ? sigFracArg : (params ? params.pulse_sig_frac : PULSE_SIG_FRAC);
+  if (D === 3) {
+    const c = Math.floor(L / 2);
+    const sig = Math.max(1, L * sigFrac);
+    for (let z = 0; z < L; z++) {
+      const dz = z - c;
+      for (let y = 0; y < L; y++) {
+        const dy = y - c;
+        for (let x = 0; x < L; x++) {
+          const dx = x - c;
+          pulseBlob[(z * L + y) * L + x] = amp * Math.exp(-0.5 * (dx * dx + dy * dy + dz * dz) / (sig * sig));
+        }
+      }
+    }
+  } else if (D === 2) {
     const c = Math.floor(L / 2);
     const sig = Math.max(1, L * sigFrac);
     for (let y = 0; y < L; y++) {
@@ -676,11 +829,13 @@ function buildPulseBlob() {
 
 function applyParams(p) {
   const dims = p.dims || 1;
-  const side = (dims === 2) ? Math.min(p.n, 128) : p.n;
-  const newN = (dims === 2) ? side * side : side;
+  let side, newN;
+  if (dims === 3)      { side = Math.min(p.n, 32);  newN = side * side * side; }
+  else if (dims === 2) { side = Math.min(p.n, 128); newN = side * side; }
+  else                 { side = p.n;                newN = side; }
   const resize = newN !== N || dims !== D;
   D = dims; L = side; N = newN;
-  if (D === 2) { ftBufRe = new Float64Array(L); ftBufIm = new Float64Array(L); }
+  if (D >= 2) { ftBufRe = new Float64Array(L); ftBufIm = new Float64Array(L); }
   params = p;
   initWeights(p);
   if (resize || r_E === null) allocBuffers(N);
@@ -711,6 +866,17 @@ function circConvInto2D(sig, kRe, kIm, out) {
   ifft2(out, wkIm, L);
 }
 
+function circConvInto3D(sig, kRe, kIm, out) {
+  out.set(sig);
+  wkIm.fill(0);
+  fft3(out, wkIm, L);
+  for (let i = 0; i < N; i++) {
+    const a = out[i], b = wkIm[i], c = kRe[i], d = kIm[i];
+    out[i] = a*c - b*d; wkIm[i] = a*d + b*c;
+  }
+  ifft3(out, wkIm, L);
+}
+
 // ── Poisson sampler ───────────────────────────────────────────────────
 function poissonSample(lam) {
   if (lam <= 0) return 0;
@@ -738,10 +904,10 @@ function tick() {
   const sp = params.spiking;
   const adaptOn = params.adapt, wa = params.w_a, tauA = params.tau_a;
   const resetOn = params.reset, tReset = params.t_reset;
-  const conv = (D === 2) ? circConvInto2D : circConvInto;
+  const conv = (D === 3) ? circConvInto3D : (D === 2) ? circConvInto2D : circConvInto;
   // Playback speed scales sim-time advanced per rendered frame: <1 = slow-mo,
   // >1 = fast-forward (more steps/tick).
-  const baseSteps = (D === 2) ? STEPS_2D : STEPS_PER_TICK;
+  const baseSteps = (D === 3) ? STEPS_3D : (D === 2) ? STEPS_2D : STEPS_PER_TICK;
   const steps = Math.max(1, Math.round(baseSteps * (params.speed || 1)));
 
   for (let s = 0; s < steps; s++) {
@@ -749,7 +915,8 @@ function tick() {
     if (resetOn) {
       resetElapsed += dt;
       if (resetElapsed >= tReset) {
-        silenceRemaining = SILENCE_DUR; pulseRemaining = params.pulse_dur; resetElapsed = 0;
+        buildPulseBlob();   // current slider shape
+        silenceRemaining = params.silence_dur; pulseRemaining = params.pulse_dur; resetElapsed = 0;
       }
     }
 
@@ -800,19 +967,24 @@ function tick() {
   }
   if (!ok) allocBuffers(N);
 
-  // 1D → plain arrays (consumed by Chart.js); 2D → Float32Array (heatmaps).
-  const pack = (D === 2) ? (a => new Float32Array(a)) : (a => Array.from(a));
-  self.postMessage({
+  // 1D → plain arrays (consumed by Chart.js); 2D/3D → Float32Array (heatmaps/volume).
+  const pack = (D >= 2) ? (a => new Float32Array(a)) : (a => Array.from(a));
+  const msg = {
     type: 'update', n: N, dims: D, L: L,
     r_E:  pack(r_E),  r_I:  pack(r_I),
-    g_EE: pack(g_EE), g_IE: pack(g_IE),
-    g_EI: pack(g_EI), g_II: pack(g_II),
-    G_E:  pack(G_E),  G_I:  pack(G_I),
     w_EE: pack(wFT.EE.vec), w_IE: pack(wFT.IE.vec),
     w_EI: pack(wFT.EI.vec), w_II: pack(wFT.II.vec),
     g_adapt: pack(g_adapt), adapt: params.adapt,
     beta_E: params.beta_E, beta_I: params.beta_I
-  });
+  };
+  // The g_* / G_* input fields are only rendered in 1D/2D; in 3D we show just
+  // the E, I and |g_a| volumes, so skip them to keep the per-frame payload small.
+  if (D < 3) {
+    msg.g_EE = pack(g_EE); msg.g_IE = pack(g_IE);
+    msg.g_EI = pack(g_EI); msg.g_II = pack(g_II);
+    msg.G_E  = pack(G_E);  msg.G_I  = pack(G_I);
+  }
+  self.postMessage(msg);
 
   setTimeout(tick, 0);
 }
@@ -1259,6 +1431,73 @@ function accumulatePhases2D(rE, rI, wEE, wIE, wEI, wII, L) {
   }
 }
 
+// ── True 3D phase (3-torus) ─────────────────────────────────────────────
+// Per-neuron 3D phase (φx, φy, φz) from the dominant x/y/z activity modes on
+// the marginal profiles. Phase similarity uses the 3D toroidal phase distance.
+function computePhases3D(r, L) {
+  const px = new Float64Array(L), py = new Float64Array(L), pz = new Float64Array(L);
+  for (let z = 0; z < L; z++) for (let y = 0; y < L; y++) {
+    const off = (z * L + y) * L;
+    for (let x = 0; x < L; x++) { const v = r[off + x]; px[x] += v; py[y] += v; pz[z] += v; }
+  }
+  return { x: computePhases(px, L), y: computePhases(py, L), z: computePhases(pz, L) };
+}
+
+function accumulatePhases3D(rE, rI, wEE, wIE, wEI, wII, L) {
+  const Nv = L * L * L, half = Math.floor(L / 2), L2 = L * L;
+  const TWO_PI = 2 * Math.PI, NORM = Math.PI * Math.sqrt(3);  // max 3D phase distance
+  const phE = computePhases3D(rE, L), phI = computePhases3D(rI, L);
+
+  // fresh random subsample of voxels each frame (EWMA averages over time)
+  const S = Math.min(PHASE_SAMPLE, Nv);
+  const idx = new Int32Array(S);
+  for (let k = 0; k < S; k++) idx[k] = (Math.random() * Nv) | 0;
+
+  const tps = [
+    ['EE', phE, phE, wEE],
+    ['EI', phE, phI, wEI],
+    ['IE', phI, phE, wIE],
+    ['II', phI, phI, wII],
+  ];
+  const sumFrame = new Float64Array(NBINS);
+  const cntFrame = new Float64Array(NBINS);
+  for (const [tk, post, pre, w] of tps) {
+    const acc = phaseAcc[tk];
+    if (!post.x || !post.y || !post.z || !pre.x || !pre.y || !pre.z) continue;  // a population is silent
+
+    let kernelZero = true;
+    for (let k = 0; k < Nv; k++) { if (w[k] !== 0) { kernelZero = false; break; } }
+    if (kernelZero) { acc.val.fill(0); continue; }
+
+    sumFrame.fill(0); cntFrame.fill(0);
+    for (let a = 0; a < S; a++) {
+      const ia = idx[a], xa = ia % L, ya = ((ia / L) | 0) % L, za = (ia / L2) | 0;
+      const pxa = post.x[xa], pya = post.y[ya], pza = post.z[za];
+      for (let b = 0; b < S; b++) {
+        const ib = idx[b], xb = ib % L, yb = ((ib / L) | 0) % L, zb = (ib / L2) | 0;
+        let ddx = pxa - pre.x[xb]; ddx = ((ddx % TWO_PI) + TWO_PI) % TWO_PI; if (ddx > Math.PI) ddx = TWO_PI - ddx;
+        let ddy = pya - pre.y[yb]; ddy = ((ddy % TWO_PI) + TWO_PI) % TWO_PI; if (ddy > Math.PI) ddy = TWO_PI - ddy;
+        let ddz = pza - pre.z[zb]; ddz = ((ddz % TWO_PI) + TWO_PI) % TWO_PI; if (ddz > Math.PI) ddz = TWO_PI - ddz;
+        let bin = (Math.sqrt(ddx*ddx + ddy*ddy + ddz*ddz) / NORM * NBINS) | 0;
+        if (bin >= NBINS) bin = NBINS - 1;
+        const offx = ((xa - xb + half) % L + L) % L;
+        const offy = ((ya - yb + half) % L + L) % L;
+        const offz = ((za - zb + half) % L + L) % L;
+        sumFrame[bin] += Math.abs(w[(offz * L + offy) * L + offx]);
+        cntFrame[bin] += 1;
+      }
+    }
+    for (let bn = 0; bn < NBINS; bn++) {
+      if (cntFrame[bn] > 0) {
+        const frameVal = sumFrame[bn] / cntFrame[bn];
+        acc.val[bn] = Number.isFinite(acc.val[bn])
+          ? (1 - EWMA_ALPHA) * acc.val[bn] + EWMA_ALPHA * frameVal
+          : frameVal;
+      }
+    }
+  }
+}
+
 function updatePhaseCharts() {
   // Shared y-range across all four phase plots
   let yMax = 0;
@@ -1346,25 +1585,151 @@ function centerRow(arr, L) {
   return out;
 }
 
+// Centre line through a 3D volume along x (at y = z = centre) — used for the
+// Weights line plot in 3D mode (the kernel is isotropic, so any axis works).
+function centerLine3D(arr, L) {
+  const c = Math.floor(L / 2), base = (c * L + c) * L, out = new Array(L);
+  for (let x = 0; x < L; x++) out[x] = arr[base + x];
+  return out;
+}
+
+// ── 3D volume rendering (2D-canvas point cloud, painter's algorithm) ───────
+// Voxels above a threshold are projected with a fixed axonometric view and
+// drawn back-to-front so alpha-blending is correct. Colour = viridis(rate),
+// alpha scales with rate so the bump reads as a dense core in a faint halo.
+let vol3d = { yaw: 0.7, pitch: 0.5, proj: null };  // default: upper-front-right corner
+
+// Project all L³ voxel centres for a given view; cache a back-to-front draw
+// order. Recomputed only when the grid size or the view angles change.
+function computeProjection(L, yaw, pitch) {
+  const n = L * L * L;
+  const sx = new Float32Array(n), sy = new Float32Array(n), depth = new Float32Array(n);
+  const cyaw = Math.cos(yaw), syaw = Math.sin(yaw);
+  const cpit = Math.cos(pitch), spit = Math.sin(pitch);
+  const half = (L - 1) / 2;
+  let i = 0;
+  for (let z = 0; z < L; z++) { const Z = z - half;
+    for (let y = 0; y < L; y++) { const Y = y - half;
+      for (let x = 0; x < L; x++) { const X = x - half;
+        const X1 =  cyaw * X + syaw * Z;     // yaw about vertical (Y) axis
+        const Z1 = -syaw * X + cyaw * Z;
+        const Y2 =  cpit * Y - spit * Z1;    // pitch about horizontal (X) axis
+        const Z2 =  spit * Y + cpit * Z1;
+        sx[i] = X1; sy[i] = Y2; depth[i] = Z2; i++;
+      }
+    }
+  }
+  // draw far → near (ascending screen depth)
+  const ord = Array.from({ length: n }, (_, k) => k).sort((a, b) => depth[a] - depth[b]);
+  return { ord, sx, sy, L, yaw, pitch, cyaw, syaw, cpit, spit };
+}
+
+function ensureProjection(L) {
+  const v = vol3d;
+  if (!v.proj || v.proj.L !== L || v.proj.yaw !== v.yaw || v.proj.pitch !== v.pitch) {
+    v.proj = computeProjection(L, v.yaw, v.pitch);
+  }
+  return v.proj;
+}
+
+// Project a single point (cube corner) with the same rotation as the volume.
+function projPoint(proj, X, Y, Z) {
+  const X1 =  proj.cyaw * X + proj.syaw * Z;
+  const Z1 = -proj.syaw * X + proj.cyaw * Z;
+  const Y2 =  proj.cpit * Y - proj.spit * Z1;
+  return { x: X1, y: Y2 };
+}
+
+function drawCubeWire(ctx, proj, scale, cx, cy) {
+  const h = proj.L / 2;
+  const C = [[-h,-h,-h],[h,-h,-h],[h,h,-h],[-h,h,-h],[-h,-h,h],[h,-h,h],[h,h,h],[-h,h,h]];
+  const p = C.map(c => { const q = projPoint(proj, c[0], c[1], c[2]); return [cx + q.x * scale, cy - q.y * scale]; });
+  const E = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = 'rgba(110,118,129,0.45)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (const [a, b] of E) { ctx.moveTo(p[a][0], p[a][1]); ctx.lineTo(p[b][0], p[b][1]); }
+  ctx.stroke();
+}
+
+// field: Float32Array(L³); vmax: shared colour/alpha scale (0 ⇒ empty); threshold
+// is a fraction (0..1) of vmax below which voxels are culled.
+function drawVolume(canvas, field, proj, threshold, vmax) {
+  const want = Math.max(60, Math.floor(canvas.clientWidth));
+  if (canvas.width !== want) { canvas.width = want; canvas.height = want; }
+  const W = canvas.width, H = canvas.height;
+  const ctx = canvas._ctx || (canvas._ctx = canvas.getContext('2d'));
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = '#0d1117';
+  ctx.fillRect(0, 0, W, H);
+
+  // scale so the cube's space diagonal always fits, whatever the view angle
+  const scale = (W * 0.46) / ((proj.L / 2) * 1.45);
+  const cx = W / 2, cy = H / 2;
+  drawCubeWire(ctx, proj, scale, cx, cy);
+  if (!(vmax > 0)) return;
+
+  const thr = threshold * vmax;
+  const ord = proj.ord, sx = proj.sx, sy = proj.sy;
+  const vox = Math.max(2, scale * 0.95);
+  const half = vox / 2;
+  for (let k = 0; k < ord.length; k++) {
+    const i = ord[k];
+    const v = field[i];
+    if (v <= thr) continue;
+    let t = v / vmax; if (t > 1) t = 1;
+    const vo = ((t * 255) | 0) * 3;
+    ctx.globalAlpha = 0.12 + 0.88 * t;
+    ctx.fillStyle = `rgb(${VLUT[vo]},${VLUT[vo+1]},${VLUT[vo+2]})`;
+    ctx.fillRect(cx + sx[i] * scale - half, cy - sy[i] * scale - half, vox, vox);
+  }
+  ctx.globalAlpha = 1;
+}
+
 const HM = {
   E: document.getElementById('hm_E'), I: document.getElementById('hm_I'),
   EE: document.getElementById('hm_g_EE'), EI: document.getElementById('hm_g_EI'),
   IE: document.getElementById('hm_g_IE'), II: document.getElementById('hm_g_II'),
   ga: document.getElementById('hm_g_a'),
 };
+const VOL = {
+  E: document.getElementById('vol_E'),
+  I: document.getElementById('vol_I'),
+  ga: document.getElementById('vol_ga'),
+};
 
 let currentN = 0, currentDims = 0;
-let gaScaleMax = 0;   // peak-hold colour scale for |g_a| (decays slowly)
+let gaScaleMax = 0;     // peak-hold colour scale for |g_a| (decays slowly), 1D/2D
+let gaScaleMax3d = 0;   // same, for the 3D |g_a| volume
+let lastVol = null;     // last 3D frame: { rE, rI, ga, gaMax, L } — kept so rotating redraws
+
+// Redraw the three volumes from the last frame using the current view + threshold.
+// Called both per sim-frame and on rotate/threshold change (so it works while paused).
+function renderVolumes() {
+  if (!lastVol) return;
+  const proj = ensureProjection(lastVol.L);
+  const thr = +document.getElementById('vol_thresh').value;
+  let rmax = 0;
+  for (let k = 0; k < lastVol.rE.length; k++) {
+    if (lastVol.rE[k] > rmax) rmax = lastVol.rE[k];
+    if (lastVol.rI[k] > rmax) rmax = lastVol.rI[k];
+  }
+  drawVolume(VOL.E, lastVol.rE, proj, thr, rmax);
+  drawVolume(VOL.I, lastVol.rI, proj, thr, rmax);
+  drawVolume(VOL.ga, lastVol.ga, proj, thr, lastVol.gaMax);
+}
 
 function updateCharts(d) {
-  const is2d = d.dims === 2;
+  const dims = d.dims;
+  const is2d = dims === 2, is3d = dims === 3;
   const L = d.L;
-  const wlen = is2d ? L : d.n;   // weights line uses a centre-row slice in 2D
+  const wlen = (dims >= 2) ? L : d.n;   // weights line uses a centre slice in 2D/3D
 
-  if (wlen !== currentN || d.dims !== currentDims) {
-    currentN = wlen; currentDims = d.dims;
+  if (wlen !== currentN || dims !== currentDims) {
+    currentN = wlen; currentDims = dims;
     const labels = Array.from({length: wlen}, (_, i) => i + 1);
-    const wch = [charts[0]].concat(is2d ? [] : [charts[1], charts[2]]);
+    const wch = [charts[0]].concat((dims >= 2) ? [] : [charts[1], charts[2]]);
     for (const ch of wch) {
       ch.data.labels = labels;
       ch.options.scales.x.min = 1;
@@ -1373,14 +1738,27 @@ function updateCharts(d) {
     resetPhaseAcc();
   }
 
-  // Weights plot (line in both modes; centre-row slice of the 2D kernel in 2D)
-  const w = is2d
+  // Weights plot (always a line; centre slice through the 2D/3D kernel)
+  const w = is3d
+    ? [centerLine3D(d.w_EE,L), centerLine3D(d.w_IE,L), centerLine3D(d.w_EI,L), centerLine3D(d.w_II,L)]
+    : is2d
     ? [centerRow(d.w_EE,L), centerRow(d.w_IE,L), centerRow(d.w_EI,L), centerRow(d.w_II,L)]
     : [d.w_EE, d.w_IE, d.w_EI, d.w_II];
   for (let di = 0; di < 4; di++) charts[0].data.datasets[di].data = w[di];
   charts[0].update('none');
 
-  if (is2d) {
+  if (is3d) {
+    // E, I and |g_a| firing-rate / adaptation volumes (g_* inputs not shown in 3D)
+    const ga = new Float32Array(d.r_E.length);
+    let gmax = 0;
+    if (d.adapt) for (let k = 0; k < ga.length; k++) {
+      const v = Math.abs(d.g_adapt[k]); ga[k] = v; if (v > gmax) gmax = v;
+    }
+    gaScaleMax3d = Math.max(gmax, gaScaleMax3d * 0.97);   // peak-hold (see 2D note)
+    lastVol = { rE: d.r_E, rI: d.r_I, ga, gaMax: gaScaleMax3d, L };
+    renderVolumes();
+    accumulatePhases3D(d.r_E, d.r_I, d.w_EE, d.w_IE, d.w_EI, d.w_II, L);
+  } else if (is2d) {
     // Firing-rate heatmaps (E, I share a [0, max] scale)
     let rmax = 0;
     for (let k = 0; k < d.r_E.length; k++) {
@@ -1443,11 +1821,12 @@ worker.onmessage = e => { if (e.data.type === 'update') pendingUpdate = e.data; 
 })();
 
 // ── Parameter collection ──────────────────────────────────────────────
+let currentDim = 1;   // 1 / 2 / 3 — set by the Dim toggle (setDim)
 function getParams() {
   const p = {
     speed:   document.getElementById('slow_speed').checked ? 0.01 : 1,
     n:       Math.pow(2, +document.getElementById('n_exp').value),
-    dims:    document.getElementById('use_2d').checked ? 2 : 1,
+    dims:    currentDim,
     spiking: document.getElementById('use_spiking').checked,
     beta_E:  +document.getElementById('beta_E').value,
     beta_I:  +document.getElementById('beta_I').value,
@@ -1459,7 +1838,8 @@ function getParams() {
     t_reset: +document.getElementById('t_reset').value,
     pulse_sig_frac: +document.getElementById('pulse_sig').value,
     pulse_amp:      +document.getElementById('pulse_amp').value,
-    pulse_dur:      +document.getElementById('pulse_dur').value / 1000,  // ms → s
+    pulse_dur:      +document.getElementById('pulse_dur').value / 1000,    // ms → s
+    silence_dur:    +document.getElementById('silence_dur').value / 1000,  // ms → s
   };
   for (const r of WT_ROWS) {
     p['sig_'+r.id] = sliderToSig(+document.getElementById('sig_'+r.id).value);
@@ -1496,26 +1876,62 @@ document.getElementById('startstop').addEventListener('click', () => {
 document.getElementById('use_spiking').addEventListener('change', sendParams);
 document.getElementById('slow_speed').addEventListener('change', sendParams);
 
-// 1D / 2D mode: swap the firing-rate & inputs slots between line charts and
-// heatmap grids; the control panel and the Weights plot are unchanged.
-function setMode(twoD) {
-  document.getElementById('dim_label').textContent = twoD ? '2D' : '1D';
-  document.getElementById('c2').style.display = twoD ? 'none' : '';
-  document.getElementById('c4').style.display = twoD ? 'none' : '';
-  document.getElementById('rate-2d').style.display = twoD ? 'flex' : 'none';
-  document.getElementById('inputs-2d').style.display = twoD ? 'flex' : 'none';
-  if (!twoD) { charts[1].resize(); charts[2].resize(); }
+// 1D / 2D / 3D mode: swap the firing-rate & inputs slots between line charts,
+// heatmap grids, and volume canvases; the Weights plot stays a line in all modes.
+function setDim(dim) {
+  currentDim = dim;
+  const is1 = dim === 1, is2 = dim === 2, is3 = dim === 3;
+  document.querySelectorAll('#dimseg .dimbtn').forEach(b =>
+    b.classList.toggle('active', +b.dataset.dim === dim));
+  document.getElementById('c2').style.display = is1 ? '' : 'none';
+  document.getElementById('c4').style.display = is1 ? '' : 'none';
+  document.getElementById('rate-2d').style.display    = is2 ? 'flex' : 'none';
+  document.getElementById('inputs-2d').style.display  = is2 ? 'flex' : 'none';
+  document.getElementById('rate-3d').style.display    = is3 ? 'flex' : 'none';
+  document.getElementById('inputs-3d').style.display  = is3 ? 'flex' : 'none';
+  document.getElementById('view3d-sec').style.display = is3 ? '' : 'none';
+  if (is1) { charts[1].resize(); charts[2].resize(); }
+  if (!is3) lastVol = null;   // drop stale volume frame when leaving 3D
   resetPhaseAcc();
   sendParams();        // dims change → worker reallocates & re-seeds
   requestAnimationFrame(sizePhaseSquare);
 }
-document.getElementById('use_2d').addEventListener('change', e => {
-  if (e.target.checked) {   // default to 64 neurons when switching to 2D
-    document.getElementById('n_exp').value = 6;
-    document.getElementById('n_val').textContent = 64;
+
+// Default grid size per dimensionality (within each mode's cap): 2D → 64, 3D → 32.
+const DIM_DEFAULT_EXP = { 2: 6, 3: 5 };
+document.getElementById('dimseg').addEventListener('click', e => {
+  const btn = e.target.closest('.dimbtn');
+  if (!btn) return;
+  const dim = +btn.dataset.dim;
+  if (dim === currentDim) return;
+  const exp = DIM_DEFAULT_EXP[dim];
+  if (exp != null) {
+    document.getElementById('n_exp').value = exp;
+    document.getElementById('n_val').textContent = Math.pow(2, exp);
   }
-  setMode(e.target.checked);
+  setDim(dim);
 });
+
+// 3D volume threshold (display-only — no sim restart)
+document.getElementById('vol_thresh').addEventListener('input', e => {
+  document.getElementById('vol_thresh_val').textContent = (+e.target.value).toFixed(2);
+  renderVolumes();
+});
+
+// Drag any volume to orbit the shared view; live re-projection on each move.
+let volDrag = null;
+function onVolDown(e) {
+  volDrag = { x: e.clientX, y: e.clientY, yaw: vol3d.yaw, pitch: vol3d.pitch };
+  e.preventDefault();
+}
+[VOL.E, VOL.I, VOL.ga].forEach(c => c.addEventListener('mousedown', onVolDown));
+window.addEventListener('mousemove', e => {
+  if (!volDrag) return;
+  vol3d.yaw = volDrag.yaw + (e.clientX - volDrag.x) * 0.01;
+  vol3d.pitch = Math.max(-1.45, Math.min(1.45, volDrag.pitch + (e.clientY - volDrag.y) * 0.01));
+  renderVolumes();
+});
+window.addEventListener('mouseup', () => { volDrag = null; });
 
 document.getElementById('n_exp').addEventListener('input', e => {
   document.getElementById('n_val').textContent = Math.pow(2, +e.target.value);
@@ -1552,6 +1968,9 @@ document.getElementById('pulse_amp').addEventListener('input', e => {
 });
 document.getElementById('pulse_dur').addEventListener('input', e => {
   document.getElementById('pulse_dur_val').textContent = e.target.value; sendParams();
+});
+document.getElementById('silence_dur').addEventListener('input', e => {
+  document.getElementById('silence_dur_val').textContent = e.target.value; sendParams();
 });
 
 for (const r of WT_ROWS) {
@@ -1703,6 +2122,9 @@ function loadPreset(p) {
   const pdurMs = Math.round((p.pulse_dur != null ? p.pulse_dur : 0.050) * 1000);
   document.getElementById('pulse_dur').value = pdurMs;
   document.getElementById('pulse_dur_val').textContent = pdurMs;
+  const sdurMs = Math.round((p.silence_dur != null ? p.silence_dur : 0.5) * 1000);
+  document.getElementById('silence_dur').value = sdurMs;
+  document.getElementById('silence_dur_val').textContent = sdurMs;
   for (const r of WT_ROWS) {
     const sig = p['sig_'+r.id];
     document.getElementById('sig_'+r.id).value = sigToSlider(sig).toFixed(3);
@@ -1714,9 +2136,7 @@ function loadPreset(p) {
     document.getElementById('inv_'+r.id).checked = !!p['inv_'+r.id];
     document.getElementById('bin_'+r.id).checked = !!p['bin_'+r.id];
   }
-  const twoD = p.dims === 2;
-  document.getElementById('use_2d').checked = twoD;
-  setMode(twoD);   // swaps layout + calls sendParams
+  setDim(p.dims === 3 ? 3 : p.dims === 2 ? 2 : 1);   // swaps layout + calls sendParams
 }
 
 function renderPresets() {
